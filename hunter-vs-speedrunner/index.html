@@ -1,0 +1,1061 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hunter vs Speed Runner</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #2c3e50;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Courier New', monospace;
+            color: white;
+        }
+        
+        .game-container {
+            position: relative;
+            border: 3px solid #34495e;
+            border-radius: 8px;
+            background: #1a1a1a;
+        }
+        
+        canvas {
+            display: block;
+            background: #8fbc8f;
+        }
+        
+        .ui-overlay {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 100;
+            pointer-events: none;
+        }
+        
+        .timer {
+            font-size: 36px;
+            font-weight: bold;
+            color: #e74c3c;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            margin-bottom: 10px;
+        }
+        
+        .status {
+            font-size: 18px;
+            color: #ecf0f1;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+        }
+        
+        .game-over, .start-screen {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.9);
+            padding: 30px;
+            border-radius: 10px;
+            text-align: center;
+            z-index: 200;
+        }
+        
+        .start-screen {
+            display: block;
+        }
+        
+        .game-over {
+            display: none;
+        }
+        
+        .game-over h2 {
+            margin-top: 0;
+            font-size: 28px;
+            color: #e74c3c;
+        }
+        
+        .game-over button {
+            padding: 12px 24px;
+            font-size: 16px;
+            background: #3498db;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 15px;
+            font-family: inherit;
+        }
+        
+        .game-over button:hover {
+            background: #2980b9;
+        }
+        
+        .controls {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            font-size: 12px;
+            color: #bdc3c7;
+            text-align: right;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <canvas id="gameCanvas" width="1500" height="800"></canvas>
+        
+        <div class="ui-overlay">
+            <div class="timer" id="timer">60</div>
+            <div class="status" id="status">Game Starting...</div>
+        </div>
+        
+        <div class="start-screen" id="startScreen">
+            <h2>Hunter vs Speed Runner</h2>
+            <p>Speed Runner (green) must survive 60 seconds!</p>
+            <p>Hunter (red) must catch the Speed Runner!</p>
+            <div style="margin: 20px 0; font-size: 14px;">
+                <div>Speed Runner: WASD keys</div>
+                <div>Hunter: Arrow keys</div>
+                <div style="margin-top: 10px;">Speed Runner can hide in houses for 5 seconds</div>
+                <div>Collect golden power-ups for speed boost!</div>
+            </div>
+            <p style="font-size: 18px; color: #3498db;">Press SPACEBAR to start!</p>
+        </div>
+        
+        <div class="game-over" id="gameOver">
+            <h2 id="winnerText">Game Over!</h2>
+            <p id="gameResult">Time's up!</p>
+            <button onclick="startNewGame()">Play Again</button>
+        </div>
+        
+        <div class="controls">
+            <div>Speed Runner: WASD</div>
+            <div>Hunter: Arrow Keys</div>
+        </div>
+    </div>
+
+    <script>
+        // Game canvas and context
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Game constants
+        const GAME_WIDTH = 1500;
+        const GAME_HEIGHT = 800;
+        const PLAYER_SIZE = 35;
+        const BASE_SPEED = 3.9; // Increased by 1.3x from 3
+        const BOOST_SPEED = 4.875; // 1.25x base speed
+        const GAME_DURATION = 60000; // 60 seconds in milliseconds
+        
+        // Terrain types
+        const TERRAIN = {
+            GRASS: 'grass',
+            WATER: 'water',
+            MUD: 'mud',
+            FOREST: 'forest',
+            HOUSE: 'house',
+            BRIDGE: 'bridge',
+            SPEEDBOOST: 'speedboost'
+        };
+        
+        // Game state
+        let gameState = 'start'; // start, playing, gameOver
+        let gameStartTime = 0;
+        let gameTimeRemaining = GAME_DURATION;
+        let lastUpdateTime = 0;
+        
+        // Input handling
+        const keys = {};
+        
+        // Game objects
+        let speedRunner, hunter, gameMap, powerUps, houses;
+        
+        // Player class
+        class Player {
+            constructor(x, y, color, isSpeedRunner = false) {
+                this.x = x;
+                this.y = y;
+                this.width = PLAYER_SIZE;
+                this.height = PLAYER_SIZE;
+                this.color = color;
+                this.speed = BASE_SPEED;
+                this.isSpeedRunner = isSpeedRunner;
+                this.speedBoostTime = 0;
+                this.inHouse = false;
+                this.houseTime = 0;
+                this.lastHouseId = null;
+                this.houseExitTime = 0;
+                this.houseEntryTime = 0;
+            }
+            
+            update(deltaTime) {
+                // Handle speed boost countdown
+                if (this.speedBoostTime > 0) {
+                    this.speedBoostTime -= deltaTime;
+                    if (this.speedBoostTime <= 0) {
+                        this.speedBoostTime = 0;
+                    }
+                }
+                
+                // Handle house time countdown
+                if (this.inHouse && this.houseTime > 0) {
+                    this.houseTime -= deltaTime;
+                    if (this.houseTime <= 0) {
+                        this.exitHouse();
+                    }
+                }
+                
+                // Update house exit cooldown
+                if (this.houseExitTime > 0) {
+                    this.houseExitTime -= deltaTime;
+                }
+                
+                // Update house entry time (for manual exit delay)
+                if (this.houseEntryTime > 0) {
+                    this.houseEntryTime -= deltaTime;
+                }
+            }
+            
+            move(dx, dy) {
+                // Check for manual house exit
+                if (this.inHouse && this.isSpeedRunner && this.houseEntryTime <= 0) {
+                    if (dx !== 0 || dy !== 0) {
+                        this.exitHouse();
+                        return;
+                    }
+                }
+                
+                if (this.inHouse) return; // Can't move while in house
+                
+                let currentSpeed = this.speed;
+                
+                // Apply speed boost if active
+                if (this.speedBoostTime > 0) {
+                    currentSpeed = BOOST_SPEED;
+                }
+                
+                let newX = this.x + dx * currentSpeed;
+                let newY = this.y + dy * currentSpeed;
+                
+                // Check terrain collision and apply effects
+                const terrainEffect = checkTerrainCollision(newX, newY, this.width, this.height);
+                
+                if (!terrainEffect.blocked) {
+                    this.x = newX;
+                    this.y = newY;
+                    
+                    // Apply terrain speed modifier
+                    if (terrainEffect.speedModifier !== 1) {
+                        // Mud slows down movement - this is already factored into the terrain check
+                    }
+                }
+                
+                // Keep player in bounds
+                this.x = Math.max(0, Math.min(GAME_WIDTH - this.width, this.x));
+                this.y = Math.max(0, Math.min(GAME_HEIGHT - this.height, this.y));
+                
+                // Check house entry for speed runner
+                if (this.isSpeedRunner && !this.inHouse) {
+                    this.checkHouseEntry();
+                }
+                
+                // Check power-up collection for speed runner
+                if (this.isSpeedRunner) {
+                    this.checkPowerUpCollection();
+                }
+            }
+            
+            checkHouseEntry() {
+                for (let house of houses) {
+                    if (house.id === this.lastHouseId && this.houseExitTime > 0) {
+                        continue; // Still in cooldown for this house
+                    }
+                    
+                    if (this.x < house.x + house.width &&
+                        this.x + this.width > house.x &&
+                        this.y < house.y + house.height &&
+                        this.y + this.height > house.y) {
+                        this.enterHouse(house);
+                        break;
+                    }
+                }
+            }
+            
+            enterHouse(house) {
+                this.inHouse = true;
+                this.houseTime = 5000; // 5 seconds
+                this.houseEntryTime = 500; // 0.5 second delay before manual exit allowed
+                this.lastHouseId = house.id;
+                playSound('houseEnter');
+            }
+            
+            exitHouse() {
+                this.inHouse = false;
+                this.houseTime = 0;
+                this.houseExitTime = 10000; // 10 second cooldown
+                
+                // Move to random side of the house with more clearance
+                const house = houses.find(h => h.id === this.lastHouseId);
+                if (house) {
+                    const side = Math.floor(Math.random() * 4);
+                    const clearance = 50; // Increased clearance from 5 to 50 pixels
+                    
+                    switch (side) {
+                        case 0: // top
+                            this.x = house.x + house.width / 2 - this.width / 2;
+                            this.y = house.y - this.height - clearance;
+                            break;
+                        case 1: // right
+                            this.x = house.x + house.width + clearance;
+                            this.y = house.y + house.height / 2 - this.height / 2;
+                            break;
+                        case 2: // bottom
+                            this.x = house.x + house.width / 2 - this.width / 2;
+                            this.y = house.y + house.height + clearance;
+                            break;
+                        case 3: // left
+                            this.x = house.x - this.width - clearance;
+                            this.y = house.y + house.height / 2 - this.height / 2;
+                            break;
+                    }
+                    
+                    // Ensure player doesn't exit outside map bounds
+                    this.x = Math.max(0, Math.min(GAME_WIDTH - this.width, this.x));
+                    this.y = Math.max(0, Math.min(GAME_HEIGHT - this.height, this.y));
+                }
+                
+                playSound('houseExit');
+            }
+            
+            checkPowerUpCollection() {
+                for (let i = powerUps.length - 1; i >= 0; i--) {
+                    const powerUp = powerUps[i];
+                    if (this.x < powerUp.x + powerUp.width &&
+                        this.x + this.width > powerUp.x &&
+                        this.y < powerUp.y + powerUp.height &&
+                        this.y + this.height > powerUp.y) {
+                        this.speedBoostTime = 5000; // 5 seconds
+                        powerUps.splice(i, 1);
+                        playSound('powerUp');
+                        
+                        // Respawn power-up after delay
+                        setTimeout(spawnPowerUp, 3000);
+                        break;
+                    }
+                }
+            }
+            
+            draw() {
+                if (this.inHouse) return; // Don't draw if inside house
+                
+                ctx.save();
+                
+                // Draw player body
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+                
+                // Draw player features
+                if (this.isSpeedRunner) {
+                    // Draw rocket pack
+                    ctx.fillStyle = this.speedBoostTime > 0 ? '#ff6b6b' : '#666';
+                    ctx.fillRect(this.x + this.width - 8, this.y + 5, 6, 20);
+                    
+                    // Draw rocket flames if boosting
+                    if (this.speedBoostTime > 0) {
+                        ctx.fillStyle = '#ff4444';
+                        ctx.fillRect(this.x + this.width - 2, this.y + 25, 4, 8);
+                        ctx.fillStyle = '#ffaa00';
+                        ctx.fillRect(this.x + this.width - 1, this.y + 27, 2, 4);
+                    }
+                } else {
+                    // Draw hunter's stick/weapon
+                    ctx.fillStyle = '#8b4513';
+                    ctx.fillRect(this.x - 5, this.y + 10, 15, 3);
+                }
+                
+                // Draw simple face
+                ctx.fillStyle = '#000';
+                ctx.fillRect(this.x + 8, this.y + 8, 2, 2); // left eye
+                ctx.fillRect(this.x + 15, this.y + 8, 2, 2); // right eye
+                
+                ctx.restore();
+            }
+        }
+        
+        // Terrain and collision functions
+        function checkTerrainCollision(x, y, width, height) {
+            const result = {
+                blocked: false,
+                speedModifier: 1
+            };
+            
+            // Check map boundaries
+            if (x < 0 || y < 0 || x + width > GAME_WIDTH || y + height > GAME_HEIGHT) {
+                result.blocked = true;
+                return result;
+            }
+            
+            // Sample multiple points for more accurate collision
+            const checkPoints = [
+                [x, y],
+                [x + width, y],
+                [x, y + height],
+                [x + width, y + height],
+                [x + width/2, y + height/2]
+            ];
+            
+            for (let point of checkPoints) {
+                const terrain = getTerrainAt(point[0], point[1]);
+                
+                if (terrain === TERRAIN.WATER || terrain === TERRAIN.FOREST) {
+                    // Check if there's a bridge over water
+                    if (terrain === TERRAIN.WATER && isBridgeAt(point[0], point[1])) {
+                        continue;
+                    }
+                    result.blocked = true;
+                    return result;
+                }
+                
+                if (terrain === TERRAIN.MUD) {
+                    result.speedModifier = 0.2;
+                }
+            }
+            
+            return result;
+        }
+        
+        function getTerrainAt(x, y) {
+            if (!gameMap) return TERRAIN.GRASS;
+            
+            const mapX = Math.floor(x / 20);
+            const mapY = Math.floor(y / 20);
+            
+            if (mapX >= 0 && mapX < gameMap.width && mapY >= 0 && mapY < gameMap.height) {
+                return gameMap.data[mapY][mapX];
+            }
+            
+            return TERRAIN.GRASS;
+        }
+        
+        function isBridgeAt(x, y) {
+            const mapX = Math.floor(x / 20);
+            const mapY = Math.floor(y / 20);
+            
+            if (gameMap.bridges) {
+                for (let bridge of gameMap.bridges) {
+                    if (mapX >= bridge.x && mapX < bridge.x + bridge.width &&
+                        mapY >= bridge.y && mapY < bridge.y + bridge.height) {
+                        return true;
+                    }
+                }
+            }
+            
+            return false;
+        }
+        
+        // Map generation
+        function generateMap() {
+            const mapWidth = Math.floor(GAME_WIDTH / 20);
+            const mapHeight = Math.floor(GAME_HEIGHT / 20);
+            
+            gameMap = {
+                width: mapWidth,
+                height: mapHeight,
+                data: [],
+                bridges: []
+            };
+            
+            // Initialize with grass
+            for (let y = 0; y < mapHeight; y++) {
+                gameMap.data[y] = [];
+                for (let x = 0; x < mapWidth; x++) {
+                    gameMap.data[y][x] = TERRAIN.GRASS;
+                }
+            }
+            
+            // Calculate obstacle coverage (10-70%)
+            const obstaclePercentage = 0.1 + Math.random() * 0.6;
+            const totalCells = mapWidth * mapHeight;
+            const obstacleCells = Math.floor(totalCells * obstaclePercentage);
+            
+            let placedObstacles = 0;
+            
+            // Rivers removed per user request
+            
+            // Generate ponds
+            const numPonds = 2 + Math.floor(Math.random() * 5);
+            for (let i = 0; i < numPonds; i++) {
+                generatePond(mapWidth, mapHeight);
+            }
+            
+            // Generate forests
+            const numForests = 3 + Math.floor(Math.random() * 8);
+            for (let i = 0; i < numForests; i++) {
+                generateForest(mapWidth, mapHeight);
+            }
+            
+            // Generate mud patches
+            const numMudPatches = 5 + Math.floor(Math.random() * 10);
+            for (let i = 0; i < numMudPatches; i++) {
+                generateMudPatch(mapWidth, mapHeight);
+            }
+            
+            // Generate houses
+            houses = [];
+            const numHouses = 3 + Math.floor(Math.random() * 5);
+            for (let i = 0; i < numHouses; i++) {
+                generateHouse(mapWidth, mapHeight, i);
+            }
+            
+            // Generate bridges over ponds
+            generateBridges(mapWidth, mapHeight);
+            
+            // Ensure spawn areas are clear
+            clearSpawnAreas(mapWidth, mapHeight);
+        }
+        
+        
+        function generatePond(mapWidth, mapHeight) {
+            const size = 3 + Math.floor(Math.random() * 6);
+            const x = Math.floor(Math.random() * (mapWidth - size));
+            const y = Math.floor(Math.random() * (mapHeight - size));
+            
+            for (let dy = 0; dy < size; dy++) {
+                for (let dx = 0; dx < size; dx++) {
+                    if (x + dx < mapWidth && y + dy < mapHeight) {
+                        // Create irregular pond shape
+                        if (Math.random() > 0.3) {
+                            gameMap.data[y + dy][x + dx] = TERRAIN.WATER;
+                        }
+                    }
+                }
+            }
+        }
+        
+        function generateForest(mapWidth, mapHeight) {
+            const size = 2 + Math.floor(Math.random() * 4);
+            const x = Math.floor(Math.random() * (mapWidth - size));
+            const y = Math.floor(Math.random() * (mapHeight - size));
+            
+            for (let dy = 0; dy < size; dy++) {
+                for (let dx = 0; dx < size; dx++) {
+                    if (x + dx < mapWidth && y + dy < mapHeight) {
+                        if (Math.random() > 0.2) {
+                            gameMap.data[y + dy][x + dx] = TERRAIN.FOREST;
+                        }
+                    }
+                }
+            }
+        }
+        
+        function generateMudPatch(mapWidth, mapHeight) {
+            const size = 3 + Math.floor(Math.random() * 6);
+            const centerX = Math.floor(Math.random() * (mapWidth - size));
+            const centerY = Math.floor(Math.random() * (mapHeight - size));
+            
+            // Create irregular mud patch using multiple circles/blobs
+            const numBlobs = 2 + Math.floor(Math.random() * 4);
+            
+            for (let blob = 0; blob < numBlobs; blob++) {
+                const blobX = Math.floor(centerX + Math.random() * size - size/2);
+                const blobY = Math.floor(centerY + Math.random() * size - size/2);
+                const blobRadius = 1 + Math.floor(Math.random() * 3);
+                
+                // Draw circular blob
+                for (let dy = -blobRadius; dy <= blobRadius; dy++) {
+                    for (let dx = -blobRadius; dx <= blobRadius; dx++) {
+                        const distance = Math.sqrt(dx * dx + dy * dy);
+                        if (distance <= blobRadius) {
+                            const x = Math.floor(blobX + dx);
+                            const y = Math.floor(blobY + dy);
+                            
+                            // Ensure coordinates are valid integers and within bounds
+                            if (x >= 0 && x < mapWidth && y >= 0 && y < mapHeight && 
+                                gameMap.data[y] && gameMap.data[y][x] !== undefined) {
+                                if (gameMap.data[y][x] === TERRAIN.GRASS) {
+                                    // Add some randomness to make edges more organic
+                                    if (distance < blobRadius - 0.5 || Math.random() > 0.3) {
+                                        gameMap.data[y][x] = TERRAIN.MUD;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        function generateHouse(mapWidth, mapHeight, id) {
+            const houseSize = 3;
+            const clearanceSize = 2; // Extra space around house for safe exit
+            let attempts = 0;
+            let placed = false;
+            
+            while (!placed && attempts < 50) {
+                const x = Math.floor(Math.random() * (mapWidth - houseSize - clearanceSize * 2)) + clearanceSize;
+                const y = Math.floor(Math.random() * (mapHeight - houseSize - clearanceSize * 2)) + clearanceSize;
+                
+                // Check if house area and surrounding clearance is clear
+                let clear = true;
+                for (let dy = -clearanceSize; dy < houseSize + clearanceSize && clear; dy++) {
+                    for (let dx = -clearanceSize; dx < houseSize + clearanceSize && clear; dx++) {
+                        const checkX = x + dx;
+                        const checkY = y + dy;
+                        if (checkX >= 0 && checkX < mapWidth && checkY >= 0 && checkY < mapHeight) {
+                            if (gameMap.data[checkY][checkX] !== TERRAIN.GRASS) {
+                                clear = false;
+                            }
+                        }
+                    }
+                }
+                
+                if (clear) {
+                    // Place house (only the house itself, not the clearance)
+                    for (let dy = 0; dy < houseSize; dy++) {
+                        for (let dx = 0; dx < houseSize; dx++) {
+                            gameMap.data[y + dy][x + dx] = TERRAIN.HOUSE;
+                        }
+                    }
+                    
+                    houses.push({
+                        id: id,
+                        x: x * 20,
+                        y: y * 20,
+                        width: houseSize * 20,
+                        height: houseSize * 20
+                    });
+                    
+                    placed = true;
+                }
+                
+                attempts++;
+            }
+        }
+        
+        function generateBridges(mapWidth, mapHeight) {
+            // Find water areas that need bridges (mainly for ponds now)
+            for (let y = 0; y < mapHeight; y++) {
+                for (let x = 0; x < mapWidth; x++) {
+                    if (gameMap.data[y][x] === TERRAIN.WATER) {
+                        // Randomly place bridges over ponds
+                        if (Math.random() < 0.05) {
+                            gameMap.bridges.push({
+                                x: x,
+                                y: y,
+                                width: 1,
+                                height: 1
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        
+        function clearSpawnAreas(mapWidth, mapHeight) {
+            // Clear larger spawn areas for both players to ensure safe spawning
+            const spawnSize = 5; // Increased from 3 to 5
+            
+            // Speed runner spawn (top-left)
+            for (let y = 0; y < spawnSize; y++) {
+                for (let x = 0; x < spawnSize; x++) {
+                    if (x < mapWidth && y < mapHeight) {
+                        gameMap.data[y][x] = TERRAIN.GRASS;
+                    }
+                }
+            }
+            
+            // Hunter spawn (bottom-right)
+            for (let y = mapHeight - spawnSize; y < mapHeight; y++) {
+                for (let x = mapWidth - spawnSize; x < mapWidth; x++) {
+                    if (x >= 0 && y >= 0) {
+                        gameMap.data[y][x] = TERRAIN.GRASS;
+                    }
+                }
+            }
+        }
+        
+        // Power-up system
+        function initializePowerUps() {
+            powerUps = [];
+            const numPowerUps = 2 + Math.floor(Math.random() * 4); // Reduced from 5-12 to 2-5
+            
+            for (let i = 0; i < numPowerUps; i++) {
+                spawnPowerUp();
+            }
+        }
+        
+        function spawnPowerUp() {
+            let attempts = 0;
+            let placed = false;
+            
+            while (!placed && attempts < 100) {
+                const x = Math.random() * (GAME_WIDTH - 20);
+                const y = Math.random() * (GAME_HEIGHT - 20);
+                
+                const terrainEffect = checkTerrainCollision(x, y, 20, 20);
+                if (!terrainEffect.blocked) {
+                    powerUps.push({
+                        x: x,
+                        y: y,
+                        width: 20,
+                        height: 20
+                    });
+                    placed = true;
+                }
+                
+                attempts++;
+            }
+        }
+        
+        // Drawing functions
+        function drawMap() {
+            if (!gameMap) return;
+            
+            const cellSize = 20;
+            
+            for (let y = 0; y < gameMap.height; y++) {
+                for (let x = 0; x < gameMap.width; x++) {
+                    const terrain = gameMap.data[y][x];
+                    const screenX = x * cellSize;
+                    const screenY = y * cellSize;
+                    
+                    switch (terrain) {
+                        case TERRAIN.GRASS:
+                            ctx.fillStyle = '#8fbc8f';
+                            break;
+                        case TERRAIN.WATER:
+                            ctx.fillStyle = '#4682b4';
+                            break;
+                        case TERRAIN.MUD:
+                            ctx.fillStyle = '#8b4513';
+                            break;
+                        case TERRAIN.FOREST:
+                            ctx.fillStyle = '#228b22';
+                            break;
+                        case TERRAIN.HOUSE:
+                            // Houses are now drawn separately in drawHouses function
+                            ctx.fillStyle = '#8fbc8f'; // Draw grass underneath
+                            break;
+                    }
+                    
+                    ctx.fillRect(screenX, screenY, cellSize, cellSize);
+                    
+                    // Draw bridge overlay
+                    if (isBridgeAt(screenX + cellSize/2, screenY + cellSize/2)) {
+                        ctx.fillStyle = '#deb887';
+                        ctx.fillRect(screenX, screenY, cellSize, cellSize);
+                    }
+                }
+            }
+        }
+        
+        function drawPowerUps() {
+            ctx.fillStyle = '#8a2be2'; // Purple power-ups
+            for (let powerUp of powerUps) {
+                ctx.fillRect(powerUp.x, powerUp.y, powerUp.width, powerUp.height);
+                
+                // Draw star shape for power-up
+                ctx.fillStyle = '#dda0dd'; // Light purple center
+                ctx.fillRect(powerUp.x + 5, powerUp.y + 5, 10, 10);
+            }
+        }
+        
+        function drawHouses() {
+            if (!houses || !speedRunner) return;
+            
+            for (let house of houses) {
+                // Check if house is in cooldown
+                let houseColor = '#ffff00'; // Yellow houses
+                let roofColor = '#ff6600'; // Orange roof
+                
+                if (speedRunner.lastHouseId === house.id && speedRunner.houseExitTime > 0) {
+                    houseColor = '#8b0000'; // Red tint for cooldown
+                    roofColor = '#660000'; // Dark red roof for cooldown
+                }
+                
+                // Draw house body (square)
+                ctx.fillStyle = houseColor;
+                ctx.fillRect(house.x, house.y + 20, house.width, house.height - 20);
+                
+                // Draw roof (triangle)
+                ctx.fillStyle = roofColor;
+                ctx.beginPath();
+                ctx.moveTo(house.x + house.width / 2, house.y); // Top point
+                ctx.lineTo(house.x, house.y + 20); // Bottom left
+                ctx.lineTo(house.x + house.width, house.y + 20); // Bottom right
+                ctx.closePath();
+                ctx.fill();
+                
+                // Draw door
+                ctx.fillStyle = '#654321'; // Brown door
+                const doorWidth = 8;
+                const doorHeight = 15;
+                const doorX = house.x + house.width / 2 - doorWidth / 2;
+                const doorY = house.y + house.height - doorHeight;
+                ctx.fillRect(doorX, doorY, doorWidth, doorHeight);
+            }
+        }
+        
+        function drawUI() {
+            if (gameState !== 'playing') return;
+            
+            // Update timer
+            const timeLeft = Math.max(0, Math.ceil(gameTimeRemaining / 1000));
+            document.getElementById('timer').textContent = timeLeft;
+            
+            // Update status
+            let status = 'Playing';
+            if (speedRunner && speedRunner.inHouse) {
+                const houseTimeLeft = Math.ceil(speedRunner.houseTime / 1000);
+                status = `Speed Runner in house (${houseTimeLeft}s)`;
+            } else if (speedRunner && speedRunner.speedBoostTime > 0) {
+                const boostTimeLeft = Math.ceil(speedRunner.speedBoostTime / 1000);
+                status = `Speed Boost Active (${boostTimeLeft}s)`;
+            }
+            document.getElementById('status').textContent = status;
+        }
+        
+        // Input handling
+        document.addEventListener('keydown', (e) => {
+            keys[e.key.toLowerCase()] = true;
+            
+            // Handle spacebar to start game
+            if (e.key === ' ' && gameState === 'start') {
+                e.preventDefault();
+                startNewGame();
+            }
+        });
+        
+        document.addEventListener('keyup', (e) => {
+            keys[e.key.toLowerCase()] = false;
+        });
+        
+        function handleInput() {
+            if (gameState !== 'playing' || !speedRunner || !hunter) return;
+            
+            // Check for manual house exit by speed runner
+            if (speedRunner.inHouse && speedRunner.houseEntryTime <= 0) {
+                let exitInput = false;
+                if (keys['w'] || keys['s'] || keys['a'] || keys['d']) {
+                    exitInput = true;
+                }
+                if (exitInput) {
+                    speedRunner.exitHouse();
+                    return;
+                }
+            }
+            
+            // Speed Runner controls (WASD)
+            let srDx = 0, srDy = 0;
+            if (keys['w']) srDy = -1;
+            if (keys['s']) srDy = 1;
+            if (keys['a']) srDx = -1;
+            if (keys['d']) srDx = 1;
+            
+            if (srDx !== 0 || srDy !== 0) {
+                // Normalize diagonal movement
+                if (srDx !== 0 && srDy !== 0) {
+                    srDx *= 0.707;
+                    srDy *= 0.707;
+                }
+                speedRunner.move(srDx, srDy);
+            }
+            
+            // Hunter controls (Arrow keys)
+            let hDx = 0, hDy = 0;
+            if (keys['arrowup']) hDy = -1;
+            if (keys['arrowdown']) hDy = 1;
+            if (keys['arrowleft']) hDx = -1;
+            if (keys['arrowright']) hDx = 1;
+            
+            if (hDx !== 0 || hDy !== 0) {
+                // Normalize diagonal movement
+                if (hDx !== 0 && hDy !== 0) {
+                    hDx *= 0.707;
+                    hDy *= 0.707;
+                }
+                hunter.move(hDx, hDy);
+            }
+        }
+        
+        // Collision detection
+        function checkPlayerCollision() {
+            if (!speedRunner || !hunter || speedRunner.inHouse) return false;
+            
+            return speedRunner.x < hunter.x + hunter.width &&
+                   speedRunner.x + speedRunner.width > hunter.x &&
+                   speedRunner.y < hunter.y + hunter.height &&
+                   speedRunner.y + speedRunner.height > hunter.y;
+        }
+        
+        // Audio system
+        function playSound(type) {
+            // Create audio context for sound effects
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            
+            function createTone(frequency, duration, type = 'sine') {
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                
+                oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
+                oscillator.type = type;
+                
+                gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + duration);
+                
+                oscillator.start(audioContext.currentTime);
+                oscillator.stop(audioContext.currentTime + duration);
+            }
+            
+            switch (type) {
+                case 'powerUp':
+                    createTone(880, 0.2);
+                    setTimeout(() => createTone(1100, 0.2), 100);
+                    break;
+                case 'houseEnter':
+                    createTone(440, 0.3, 'square');
+                    break;
+                case 'houseExit':
+                    createTone(330, 0.3, 'square');
+                    break;
+                case 'gameOver':
+                    createTone(220, 0.5, 'sawtooth');
+                    break;
+                case 'victory':
+                    createTone(660, 0.2);
+                    setTimeout(() => createTone(880, 0.2), 150);
+                    setTimeout(() => createTone(1100, 0.3), 300);
+                    break;
+            }
+        }
+        
+        // Game loop
+        function gameLoop(currentTime) {
+            if (lastUpdateTime === 0) {
+                lastUpdateTime = currentTime;
+            }
+            
+            const deltaTime = currentTime - lastUpdateTime;
+            lastUpdateTime = currentTime;
+            
+            if (gameState === 'playing' && speedRunner && hunter) {
+                // Update game timer
+                gameTimeRemaining -= deltaTime;
+                
+                // Handle input
+                handleInput();
+                
+                // Update players
+                speedRunner.update(deltaTime);
+                hunter.update(deltaTime);
+                
+                // Check collisions
+                if (checkPlayerCollision()) {
+                    endGame('hunter');
+                } else if (gameTimeRemaining <= 0) {
+                    endGame('speedrunner');
+                }
+            }
+            
+            // Render
+            render();
+            
+            requestAnimationFrame(gameLoop);
+        }
+        
+        function render() {
+            // Clear canvas
+            ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+            
+            if (gameState === 'playing') {
+                // Draw game world
+                drawMap();
+                drawHouses(); // Draw houses with proper house shape
+                drawPowerUps();
+                
+                // Draw players
+                if (speedRunner) speedRunner.draw();
+                if (hunter) hunter.draw();
+                
+                // Update UI
+                drawUI();
+            } else if (gameState === 'start') {
+                // Draw background pattern for start screen
+                ctx.fillStyle = '#8fbc8f';
+                ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+                
+                // Draw some decorative elements
+                ctx.fillStyle = '#228b22';
+                for (let i = 0; i < 20; i++) {
+                    const x = (i * 150) % GAME_WIDTH;
+                    const y = Math.floor(i * 150 / GAME_WIDTH) * 100 + 50;
+                    ctx.fillRect(x, y, 40, 40);
+                }
+            }
+        }
+        
+        // Game state management
+        function startNewGame() {
+            gameState = 'playing';
+            gameStartTime = performance.now();
+            gameTimeRemaining = GAME_DURATION;
+            
+            // Generate new map
+            generateMap();
+            
+            // Initialize power-ups
+            initializePowerUps();
+            
+            // Reset players with safe spawn positions
+            speedRunner = new Player(60, 60, '#4CAF50', true); // More inset from corner
+            hunter = new Player(GAME_WIDTH - 140, GAME_HEIGHT - 140, '#F44336', false); // More inset from corner
+            
+            // Hide start and game over screens
+            document.getElementById('startScreen').style.display = 'none';
+            document.getElementById('gameOver').style.display = 'none';
+            
+            // Update status
+            document.getElementById('status').textContent = 'Game Started!';
+        }
+        
+        function endGame(winner) {
+            gameState = 'gameOver';
+            
+            const gameOverEl = document.getElementById('gameOver');
+            const winnerTextEl = document.getElementById('winnerText');
+            const gameResultEl = document.getElementById('gameResult');
+            
+            if (winner === 'hunter') {
+                winnerTextEl.textContent = 'Hunter Wins!';
+                gameResultEl.textContent = 'The hunter caught the speed runner!';
+                playSound('gameOver');
+            } else {
+                winnerTextEl.textContent = 'Speed Runner Wins!';
+                gameResultEl.textContent = 'The speed runner survived 60 seconds!';
+                playSound('victory');
+            }
+            
+            gameOverEl.style.display = 'block';
+        }
+        
+        // Initialize game
+        function init() {
+            console.log('Hunter vs Speed Runner - Game Initialized');
+            // Initialize empty arrays to prevent undefined errors
+            houses = [];
+            powerUps = [];
+            // Don't start game immediately, show start screen
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Start the game
+        init();
+    </script>
+</body>
+</html>

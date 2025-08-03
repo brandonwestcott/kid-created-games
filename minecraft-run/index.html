@@ -1,0 +1,951 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minecraft Runner</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #87CEEB;
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        #gameContainer {
+            width: 1500px;
+            height: 900px;
+            margin: 0 auto;
+            position: relative;
+            background: linear-gradient(to top, #87CEEB 0%, #98D8E8 100%);
+        }
+
+        #gameCanvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+            border: 2px solid #654321;
+        }
+
+        #ui {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 100;
+        }
+
+        .player-ui {
+            position: absolute;
+            top: 20px;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            font-size: 20px;
+            font-weight: bold;
+        }
+
+        #leftPlayerUI {
+            left: 20px;
+        }
+
+        #rightPlayerUI {
+            right: 20px;
+        }
+
+        .power-up-indicator {
+            margin-top: 10px;
+            font-size: 16px;
+            color: #FFD700;
+        }
+
+        #gameState {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: white;
+            text-shadow: 3px 3px 6px rgba(0,0,0,0.9);
+            font-size: 48px;
+            font-weight: bold;
+            background: rgba(0,0,0,0.7);
+            padding: 40px;
+            border-radius: 20px;
+            border: 4px solid #8B4513;
+        }
+
+        #instructions {
+            font-size: 24px;
+            margin-top: 20px;
+            line-height: 1.4;
+        }
+
+        .split-line {
+            position: absolute;
+            left: 50%;
+            top: 0;
+            width: 4px;
+            height: 100%;
+            background: #654321;
+            transform: translateX(-50%);
+            z-index: 50;
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas"></canvas>
+        <div class="split-line"></div>
+        
+        <div id="ui">
+            <div id="leftPlayerUI" class="player-ui">
+                <div>Distance: <span id="leftDistance">0</span>m</div>
+                <div id="leftPowerUps" class="power-up-indicator"></div>
+            </div>
+            
+            <div id="rightPlayerUI" class="player-ui">
+                <div>Distance: <span id="rightDistance">0</span>m</div>
+                <div id="rightPowerUps" class="power-up-indicator"></div>
+            </div>
+            
+            <div id="gameState">
+                <div id="gameTitle">MINECRAFT RUNNER</div>
+                <div id="instructions">
+                    Left Player: WASD Controls<br>
+                    Right Player: Arrow Keys<br><br>
+                    W/↑: Jump | S/↓: Duck<br>
+                    A/←: Left Lane | D/→: Right Lane<br><br>
+                    Press SPACE to Start
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        class MinecraftRunner {
+            constructor() {
+                this.canvas = document.getElementById('gameCanvas');
+                this.canvas.width = 1500;
+                this.canvas.height = 900;
+                
+                this.gameState = 'start'; // start, countdown, playing, gameOver
+                this.countdown = 5;
+                this.gameTime = 0;
+                this.obstacleTimer = 0;
+                this.biomeTimer = 0;
+                this.powerUpTimer = 0;
+                
+                this.currentBiome = 0;
+                this.biomes = [
+                    { name: 'grass', ground: 0x90EE90, sky: 0x87CEEB, obstacle: 0x8B4513 },
+                    { name: 'desert', ground: 0xF4A460, sky: 0xFF6347, obstacle: 0xDEB887 },
+                    { name: 'snow', ground: 0xFFFAFA, sky: 0xB0E0E6, obstacle: 0x708090 },
+                    { name: 'forest', ground: 0x228B22, sky: 0x9ACD32, obstacle: 0x8B4513 },
+                    { name: 'stone', ground: 0x696969, sky: 0x708090, obstacle: 0x2F4F4F }
+                ];
+                
+                this.leftPlayer = {
+                    x: 0, y: 0, z: 0,
+                    lane: 1, targetLane: 1,
+                    isJumping: false, isDucking: false,
+                    jumpVelocity: 0, distance: 0,
+                    powerUps: { invincible: 0, superJump: 0 },
+                    mesh: null, isAlive: true
+                };
+                
+                this.rightPlayer = {
+                    x: 0, y: 0, z: 0,
+                    lane: 1, targetLane: 1,
+                    isJumping: false, isDucking: false,
+                    jumpVelocity: 0, distance: 0,
+                    powerUps: { invincible: 0, superJump: 0 },
+                    mesh: null, isAlive: true
+                };
+                
+                this.obstacles = [];
+                this.powerUps = [];
+                this.keys = {};
+                this.audioContext = null;
+                this.sounds = {};
+                
+                this.initThreeJS();
+                this.createPlayers();
+                this.setupControls();
+                this.createTerrain();
+                this.initAudio();
+                this.animate();
+            }
+            
+            initThreeJS() {
+                this.scene = new THREE.Scene();
+                this.camera = new THREE.PerspectiveCamera(75, 1500/900, 0.1, 1000);
+                this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true });
+                this.renderer.setSize(1500, 900);
+                this.renderer.setClearColor(this.biomes[this.currentBiome].sky);
+                this.renderer.shadowMap.enabled = true;
+                this.renderer.shadowMap.type = THREE.BasicShadowMap; // Use basic shadows for better performance
+                
+                // Setup split-screen viewports
+                this.leftViewport = { x: 0, y: 0, width: 0.5, height: 1 };
+                this.rightViewport = { x: 0.5, y: 0, width: 0.5, height: 1 };
+                
+                // Setup cameras for each player
+                this.leftCamera = new THREE.PerspectiveCamera(75, (1500/2)/900, 0.1, 1000);
+                this.rightCamera = new THREE.PerspectiveCamera(75, (1500/2)/900, 0.1, 1000);
+                
+                // Position cameras behind and above players
+                this.leftCamera.position.set(5, 8, -15);
+                this.leftCamera.lookAt(5, 2, 0);
+                
+                this.rightCamera.position.set(-5, 8, -15);
+                this.rightCamera.lookAt(-5, 2, 0);
+                
+                // Add lighting
+                const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+                this.scene.add(ambientLight);
+                
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                directionalLight.position.set(0, 20, 10);
+                directionalLight.castShadow = true;
+                directionalLight.shadow.mapSize.width = 1024;
+                directionalLight.shadow.mapSize.height = 1024;
+                this.scene.add(directionalLight);
+                
+                // Add fog for depth
+                this.scene.fog = new THREE.Fog(this.biomes[this.currentBiome].sky, 50, 200);
+            }
+            
+            createPlayers() {
+                // Left player (adult with brown hair and glasses)
+                const leftPlayerGroup = new THREE.Group();
+                
+                // Body
+                const bodyGeometry = new THREE.BoxGeometry(1.5, 2, 0.8);
+                const bodyMaterial = new THREE.MeshLambertMaterial({ color: 0xFF0000 });
+                const leftBody = new THREE.Mesh(bodyGeometry, bodyMaterial);
+                leftBody.castShadow = true;
+                leftPlayerGroup.add(leftBody);
+                
+                // Head
+                const headGeometry = new THREE.BoxGeometry(1, 1, 1);
+                const headMaterial = new THREE.MeshLambertMaterial({ color: 0xFFDBAD });
+                const leftHead = new THREE.Mesh(headGeometry, headMaterial);
+                leftHead.position.y = 1.5;
+                leftHead.castShadow = true;
+                leftPlayerGroup.add(leftHead);
+                
+                // Hair (brown and curly - represented as bumpy blocks)
+                const hairMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
+                for(let i = 0; i < 5; i++) {
+                    const hairPiece = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), hairMaterial);
+                    hairPiece.position.set(
+                        (Math.random() - 0.5) * 1.2,
+                        1.8 + Math.random() * 0.3,
+                        (Math.random() - 0.5) * 1.2
+                    );
+                    hairPiece.castShadow = true;
+                    leftPlayerGroup.add(hairPiece);
+                }
+                
+                // Glasses
+                const glassesGeometry = new THREE.BoxGeometry(0.8, 0.3, 0.1);
+                const glassesMaterial = new THREE.MeshLambertMaterial({ color: 0x000000 });
+                const glasses = new THREE.Mesh(glassesGeometry, glassesMaterial);
+                glasses.position.set(0, 1.6, 0.51);
+                leftPlayerGroup.add(glasses);
+                
+                leftPlayerGroup.position.set(5, 1, 0);
+                this.leftPlayer.mesh = leftPlayerGroup;
+                this.scene.add(leftPlayerGroup);
+                
+                // Right player (child with blonde hair)
+                const rightPlayerGroup = new THREE.Group();
+                
+                // Body (smaller)
+                const rightBody = new THREE.Mesh(
+                    new THREE.BoxGeometry(1.2, 1.6, 0.6),
+                    new THREE.MeshLambertMaterial({ color: 0x0000FF })
+                );
+                rightBody.castShadow = true;
+                rightPlayerGroup.add(rightBody);
+                
+                // Head (smaller)
+                const rightHead = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.8, 0.8, 0.8),
+                    new THREE.MeshLambertMaterial({ color: 0xFFDBAD })
+                );
+                rightHead.position.y = 1.2;
+                rightHead.castShadow = true;
+                rightPlayerGroup.add(rightHead);
+                
+                // Blonde hair
+                const blondeHairMaterial = new THREE.MeshLambertMaterial({ color: 0xFFD700 });
+                for(let i = 0; i < 4; i++) {
+                    const hairPiece = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 0.25), blondeHairMaterial);
+                    hairPiece.position.set(
+                        (Math.random() - 0.5) * 1,
+                        1.5 + Math.random() * 0.2,
+                        (Math.random() - 0.5) * 1
+                    );
+                    hairPiece.castShadow = true;
+                    rightPlayerGroup.add(hairPiece);
+                }
+                
+                rightPlayerGroup.position.set(-5, 0.8, 0);
+                rightPlayerGroup.scale.set(0.8, 0.8, 0.8); // Smaller child
+                this.rightPlayer.mesh = rightPlayerGroup;
+                this.scene.add(rightPlayerGroup);
+            }
+            
+            createTerrain() {
+                // Create ground planes for both sides
+                const groundGeometry = new THREE.PlaneGeometry(20, 200);
+                const currentBiome = this.biomes[this.currentBiome];
+                const groundMaterial = new THREE.MeshLambertMaterial({ color: currentBiome.ground });
+                
+                const leftGround = new THREE.Mesh(groundGeometry, groundMaterial);
+                leftGround.rotation.x = -Math.PI / 2;
+                leftGround.position.set(5, 0, 50);
+                leftGround.receiveShadow = true;
+                this.scene.add(leftGround);
+                
+                const rightGround = new THREE.Mesh(groundGeometry, groundMaterial);
+                rightGround.rotation.x = -Math.PI / 2;
+                rightGround.position.set(-5, 0, 50);
+                rightGround.receiveShadow = true;
+                this.scene.add(rightGround);
+                
+                // Add lane markers
+                this.createLaneMarkers();
+            }
+            
+            createLaneMarkers() {
+                const markerMaterial = new THREE.MeshLambertMaterial({ color: 0xFFFFFF });
+                
+                // Left side lane markers
+                for(let z = -20; z < 200; z += 10) {
+                    for(let lane = 0; lane < 4; lane++) {
+                        const marker = new THREE.Mesh(
+                            new THREE.BoxGeometry(0.2, 0.1, 2),
+                            markerMaterial
+                        );
+                        marker.position.set(2 + lane * 2, 0.05, z);
+                        this.scene.add(marker);
+                    }
+                }
+                
+                // Right side lane markers
+                for(let z = -20; z < 200; z += 10) {
+                    for(let lane = 0; lane < 4; lane++) {
+                        const marker = new THREE.Mesh(
+                            new THREE.BoxGeometry(0.2, 0.1, 2),
+                            markerMaterial
+                        );
+                        marker.position.set(-8 + lane * 2, 0.05, z);
+                        this.scene.add(marker);
+                    }
+                }
+            }
+            
+            initAudio() {
+                try {
+                    this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    this.createSounds();
+                } catch (e) {
+                    console.log('Audio not supported');
+                }
+            }
+            
+            createSounds() {
+                this.sounds = {
+                    jump: this.createTone(400, 0.1, 'sine'),
+                    duck: this.createTone(200, 0.1, 'sawtooth'),
+                    collision: this.createTone(150, 0.3, 'square'),
+                    powerUp: this.createTone(600, 0.2, 'sine'),
+                    step: this.createTone(100, 0.05, 'triangle')
+                };
+            }
+            
+            createTone(frequency, duration, type = 'sine') {
+                return () => {
+                    if (!this.audioContext) return;
+                    
+                    const oscillator = this.audioContext.createOscillator();
+                    const gainNode = this.audioContext.createGain();
+                    
+                    oscillator.connect(gainNode);
+                    gainNode.connect(this.audioContext.destination);
+                    
+                    oscillator.frequency.value = frequency;
+                    oscillator.type = type;
+                    
+                    gainNode.gain.setValueAtTime(0.1, this.audioContext.currentTime);
+                    gainNode.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + duration);
+                    
+                    oscillator.start(this.audioContext.currentTime);
+                    oscillator.stop(this.audioContext.currentTime + duration);
+                };
+            }
+            
+            playSound(soundName) {
+                if (this.sounds[soundName]) {
+                    this.sounds[soundName]();
+                }
+            }
+            
+            setupControls() {
+                document.addEventListener('keydown', (event) => {
+                    this.keys[event.code] = true;
+                    
+                    if (this.gameState === 'start' && event.code === 'Space') {
+                        // Enable audio context on user interaction
+                        if (this.audioContext && this.audioContext.state === 'suspended') {
+                            this.audioContext.resume();
+                        }
+                        this.startCountdown();
+                    } else if (this.gameState === 'gameOver' && event.code === 'KeyR') {
+                        this.restartGame();
+                    }
+                });
+                
+                document.addEventListener('keyup', (event) => {
+                    this.keys[event.code] = false;
+                });
+            }
+            
+            startCountdown() {
+                this.gameState = 'countdown';
+                this.countdown = 5;
+                
+                const countdownInterval = setInterval(() => {
+                    this.countdown--;
+                    this.updateGameStateDisplay();
+                    
+                    if (this.countdown <= 0) {
+                        clearInterval(countdownInterval);
+                        this.gameState = 'playing';
+                        this.updateGameStateDisplay();
+                    }
+                }, 1000);
+            }
+            
+            restartGame() {
+                // Reset game state
+                this.gameState = 'start';
+                this.gameTime = 0;
+                this.obstacleTimer = 0;
+                this.biomeTimer = 0;
+                this.powerUpTimer = 0;
+                
+                // Reset players
+                this.leftPlayer.distance = 0;
+                this.leftPlayer.isAlive = true;
+                this.leftPlayer.lane = 1;
+                this.leftPlayer.targetLane = 1;
+                this.leftPlayer.isJumping = false;
+                this.leftPlayer.isDucking = false;
+                this.leftPlayer.powerUps = { invincible: 0, superJump: 0 };
+                
+                this.rightPlayer.distance = 0;
+                this.rightPlayer.isAlive = true;
+                this.rightPlayer.lane = 1;
+                this.rightPlayer.targetLane = 1;
+                this.rightPlayer.isJumping = false;
+                this.rightPlayer.isDucking = false;
+                this.rightPlayer.powerUps = { invincible: 0, superJump: 0 };
+                
+                // Clear obstacles and power-ups
+                this.obstacles.forEach(obstacle => {
+                    this.scene.remove(obstacle.mesh);
+                    if (obstacle.mesh.shadowPlane) {
+                        this.scene.remove(obstacle.mesh.shadowPlane);
+                    }
+                });
+                this.powerUps.forEach(powerUp => this.scene.remove(powerUp.mesh));
+                this.obstacles = [];
+                this.powerUps = [];
+                
+                this.updateGameStateDisplay();
+                this.updateUI();
+            }
+            
+            updateGameStateDisplay() {
+                const gameStateEl = document.getElementById('gameState');
+                const gameTitleEl = document.getElementById('gameTitle');
+                const instructionsEl = document.getElementById('instructions');
+                
+                switch(this.gameState) {
+                    case 'start':
+                        gameStateEl.classList.remove('hidden');
+                        gameTitleEl.textContent = 'MINECRAFT RUNNER';
+                        instructionsEl.innerHTML = `
+                            Left Player: WASD Controls<br>
+                            Right Player: Arrow Keys<br><br>
+                            W/↑: Jump | S/↓: Duck<br>
+                            A/←: Left Lane | D/→: Right Lane<br><br>
+                            Press SPACE to Start
+                        `;
+                        break;
+                    case 'countdown':
+                        gameStateEl.classList.remove('hidden');
+                        gameTitleEl.textContent = this.countdown > 0 ? this.countdown : 'GO!';
+                        instructionsEl.textContent = '';
+                        break;
+                    case 'playing':
+                        gameStateEl.classList.add('hidden');
+                        break;
+                    case 'gameOver':
+                        gameStateEl.classList.remove('hidden');
+                        const winner = this.leftPlayer.isAlive ? 'Left Player Wins!' : 'Right Player Wins!';
+                        if (!this.leftPlayer.isAlive && !this.rightPlayer.isAlive) {
+                            gameTitleEl.textContent = 'Draw!';
+                        } else {
+                            gameTitleEl.textContent = winner;
+                        }
+                        instructionsEl.innerHTML = `
+                            Left: ${this.leftPlayer.distance}m<br>
+                            Right: ${this.rightPlayer.distance}m<br><br>
+                            Press R to Restart
+                        `;
+                        break;
+                }
+            }
+            
+            handleInput() {
+                if (this.gameState !== 'playing') return;
+                
+                // Left player controls (WASD)
+                if (this.leftPlayer.isAlive) {
+                    if (this.keys['KeyA'] && this.leftPlayer.targetLane < 2) {
+                        this.leftPlayer.targetLane++;
+                        this.keys['KeyA'] = false;
+                    }
+                    if (this.keys['KeyD'] && this.leftPlayer.targetLane > 0) {
+                        this.leftPlayer.targetLane--;
+                        this.keys['KeyD'] = false;
+                    }
+                    if (this.keys['KeyW'] && !this.leftPlayer.isJumping) {
+                        this.jump(this.leftPlayer);
+                        this.keys['KeyW'] = false;
+                    }
+                    const wasDucking = this.leftPlayer.isDucking;
+                    this.leftPlayer.isDucking = this.keys['KeyS'];
+                    if (!wasDucking && this.leftPlayer.isDucking) {
+                        this.playSound('duck');
+                    }
+                }
+                
+                // Right player controls (Arrow keys)
+                if (this.rightPlayer.isAlive) {
+                    if (this.keys['ArrowLeft'] && this.rightPlayer.targetLane < 2) {
+                        this.rightPlayer.targetLane++;
+                        this.keys['ArrowLeft'] = false;
+                    }
+                    if (this.keys['ArrowRight'] && this.rightPlayer.targetLane > 0) {
+                        this.rightPlayer.targetLane--;
+                        this.keys['ArrowRight'] = false;
+                    }
+                    if (this.keys['ArrowUp'] && !this.rightPlayer.isJumping) {
+                        this.jump(this.rightPlayer);
+                        this.keys['ArrowUp'] = false;
+                    }
+                    const wasDucking = this.rightPlayer.isDucking;
+                    this.rightPlayer.isDucking = this.keys['ArrowDown'];
+                    if (!wasDucking && this.rightPlayer.isDucking) {
+                        this.playSound('duck');
+                    }
+                }
+            }
+            
+            jump(player) {
+                player.isJumping = true;
+                player.jumpVelocity = player.powerUps.superJump > 0 ? 1.08 : 0.72;
+                if (player.powerUps.superJump > 0) {
+                    player.powerUps.superJump--;
+                }
+                this.playSound('jump');
+            }
+            
+            updatePlayers(deltaTime) {
+                [this.leftPlayer, this.rightPlayer].forEach((player, index) => {
+                    if (!player.isAlive) return;
+                    
+                    // Update distance
+                    player.distance += deltaTime * 20;
+                    
+                    // Lane switching
+                    const targetX = (index === 0 ? 3 : -7) + player.targetLane * 2;
+                    player.x += (targetX - player.x) * deltaTime * 10;
+                    player.lane = player.targetLane;
+                    
+                    // Jumping physics
+                    if (player.isJumping) {
+                        player.y += player.jumpVelocity;
+                        player.jumpVelocity -= deltaTime * 2;
+                        
+                        if (player.y <= 0) {
+                            player.y = 0;
+                            player.isJumping = false;
+                            player.jumpVelocity = 0;
+                        }
+                    }
+                    
+                    // Ducking
+                    const duckOffset = player.isDucking ? -0.5 : 0;
+                    
+                    // Update mesh position
+                    if (player.mesh) {
+                        player.mesh.position.x = player.x;
+                        player.mesh.position.y = (index === 0 ? 1 : 0.8) + player.y + duckOffset;
+                        player.mesh.scale.y = player.isDucking ? 0.5 : 1;
+                    }
+                    
+                    // Update power-up timers
+                    Object.keys(player.powerUps).forEach(key => {
+                        if (player.powerUps[key] > 0) {
+                            player.powerUps[key] -= deltaTime;
+                            if (player.powerUps[key] <= 0) {
+                                player.powerUps[key] = 0;
+                            }
+                        }
+                    });
+                });
+            }
+            
+            spawnObstacle() {
+                const obstacleTypes = ['jump', 'duck', 'dodge'];
+                const type = obstacleTypes[Math.floor(Math.random() * obstacleTypes.length)];
+                const currentBiome = this.biomes[this.currentBiome];
+                
+                // Left side obstacle
+                const leftObstacle = this.createObstacleByType(type, 5, currentBiome.obstacle);
+                this.obstacles.push({
+                    mesh: leftObstacle,
+                    type: type,
+                    side: 'left',
+                    lane: type === 'dodge' ? Math.floor(Math.random() * 3) : -1
+                });
+                
+                // Right side obstacle  
+                const rightObstacle = this.createObstacleByType(type, -5, currentBiome.obstacle);
+                this.obstacles.push({
+                    mesh: rightObstacle,
+                    type: type,
+                    side: 'right',
+                    lane: type === 'dodge' ? Math.floor(Math.random() * 3) : -1
+                });
+            }
+            
+            createObstacleByType(type, xOffset, color) {
+                let geometry, mesh;
+                
+                // Randomize obstacle colors - mix biome color with stone colors
+                const obstacleColors = [
+                    color,          // Original biome color
+                    0x696969,       // Dim gray (stone)
+                    0x708090,       // Slate gray
+                    0x2F4F4F,       // Dark slate gray
+                    0x808080        // Gray
+                ];
+                const chosenColor = obstacleColors[Math.floor(Math.random() * obstacleColors.length)];
+                const material = new THREE.MeshLambertMaterial({ color: chosenColor });
+                
+                switch(type) {
+                    case 'jump':
+                        geometry = new THREE.BoxGeometry(6, 1.5, 2);
+                        mesh = new THREE.Mesh(geometry, material);
+                        mesh.position.set(xOffset, 0.75, 100);
+                        break;
+                    case 'duck':
+                        geometry = new THREE.BoxGeometry(6, 1, 2);
+                        mesh = new THREE.Mesh(geometry, material);
+                        mesh.position.set(xOffset, 3, 100);
+                        
+                        // Add shadow plane under floating duck obstacles for better visibility
+                        const shadowGeometry = new THREE.PlaneGeometry(6, 2);
+                        const shadowMaterial = new THREE.MeshBasicMaterial({ 
+                            color: 0x000000, 
+                            transparent: true, 
+                            opacity: 0.3 
+                        });
+                        const shadowPlane = new THREE.Mesh(shadowGeometry, shadowMaterial);
+                        shadowPlane.rotation.x = -Math.PI / 2;
+                        shadowPlane.position.set(xOffset, 0.01, 100);
+                        this.scene.add(shadowPlane);
+                        
+                        // Store reference to shadow for cleanup
+                        mesh.shadowPlane = shadowPlane;
+                        break;
+                    case 'dodge':
+                        geometry = new THREE.BoxGeometry(2, 4, 2);
+                        mesh = new THREE.Mesh(geometry, material);
+                        mesh.position.set(xOffset, 2, 100);
+                        break;
+                }
+                
+                mesh.castShadow = true;
+                mesh.receiveShadow = true;
+                this.scene.add(mesh);
+                return mesh;
+            }
+            
+            spawnPowerUp() {
+                const powerUpTypes = ['invincible', 'slow', 'superJump'];
+                const type = powerUpTypes[Math.floor(Math.random() * powerUpTypes.length)];
+                
+                // Spawn on both sides
+                ['left', 'right'].forEach((side, index) => {
+                    const xOffset = index === 0 ? 5 : -5;
+                    const lane = Math.floor(Math.random() * 3);
+                    const x = xOffset + (lane - 1) * 2;
+                    
+                    const powerUp = this.createPowerUpByType(type, x);
+                    this.powerUps.push({
+                        mesh: powerUp,
+                        type: type,
+                        side: side,
+                        lane: lane
+                    });
+                });
+            }
+            
+            createPowerUpByType(type, x) {
+                let geometry, material, mesh;
+                
+                switch(type) {
+                    case 'invincible':
+                        geometry = new THREE.SphereGeometry(0.5, 8, 6);
+                        material = new THREE.MeshLambertMaterial({ color: 0xFFD700 });
+                        break;
+                    case 'slow':
+                        geometry = new THREE.CylinderGeometry(0.3, 0.3, 1, 8);
+                        material = new THREE.MeshLambertMaterial({ color: 0x800080 });
+                        break;
+                    case 'superJump':
+                        geometry = new THREE.ConeGeometry(0.4, 1, 8);
+                        material = new THREE.MeshLambertMaterial({ color: 0x00FF00 });
+                        break;
+                }
+                
+                mesh = new THREE.Mesh(geometry, material);
+                mesh.position.set(x, 1, 100);
+                mesh.castShadow = true;
+                this.scene.add(mesh);
+                return mesh;
+            }
+            
+            updateObstacles(deltaTime) {
+                this.obstacles = this.obstacles.filter(obstacle => {
+                    obstacle.mesh.position.z -= deltaTime * 20;
+                    
+                    // Update shadow plane position if it exists
+                    if (obstacle.mesh.shadowPlane) {
+                        obstacle.mesh.shadowPlane.position.z -= deltaTime * 20;
+                    }
+                    
+                    // Remove obstacles that have passed
+                    if (obstacle.mesh.position.z < -20) {
+                        this.scene.remove(obstacle.mesh);
+                        // Also remove shadow plane if it exists
+                        if (obstacle.mesh.shadowPlane) {
+                            this.scene.remove(obstacle.mesh.shadowPlane);
+                        }
+                        return false;
+                    }
+                    
+                    // Check collisions
+                    this.checkObstacleCollision(obstacle);
+                    
+                    return true;
+                });
+            }
+            
+            updatePowerUps(deltaTime) {
+                this.powerUps = this.powerUps.filter(powerUp => {
+                    powerUp.mesh.position.z -= deltaTime * 20;
+                    powerUp.mesh.rotation.y += deltaTime * 4;
+                    
+                    // Remove power-ups that have passed
+                    if (powerUp.mesh.position.z < -20) {
+                        this.scene.remove(powerUp.mesh);
+                        return false;
+                    }
+                    
+                    // Check collection
+                    this.checkPowerUpCollection(powerUp);
+                    
+                    return true;
+                });
+            }
+            
+            checkObstacleCollision(obstacle) {
+                const player = obstacle.side === 'left' ? this.leftPlayer : this.rightPlayer;
+                if (!player.isAlive || player.powerUps.invincible > 0) return;
+                
+                const playerZ = 0;
+                const obstacleZ = obstacle.mesh.position.z;
+                
+                if (Math.abs(obstacleZ - playerZ) < 2) {
+                    let collision = false;
+                    
+                    switch(obstacle.type) {
+                        case 'jump':
+                            if (player.y < 1.5) collision = true;
+                            break;
+                        case 'duck':
+                            if (player.y > 0.5 && !player.isDucking) collision = true;
+                            break;
+                        case 'dodge':
+                            if (Math.abs(obstacle.mesh.position.x - player.x) < 1.5) collision = true;
+                            break;
+                    }
+                    
+                    if (collision) {
+                        player.isAlive = false;
+                        this.playSound('collision');
+                        this.checkGameOver();
+                    }
+                }
+            }
+            
+            checkPowerUpCollection(powerUp) {
+                const player = powerUp.side === 'left' ? this.leftPlayer : this.rightPlayer;
+                const otherPlayer = powerUp.side === 'left' ? this.rightPlayer : this.leftPlayer;
+                
+                if (!player.isAlive) return;
+                
+                const playerZ = 0;
+                const powerUpZ = powerUp.mesh.position.z;
+                
+                if (Math.abs(powerUpZ - playerZ) < 2 && Math.abs(powerUp.mesh.position.x - player.x) < 1.5) {
+                    // Collect power-up
+                    this.scene.remove(powerUp.mesh);
+                    this.playSound('powerUp');
+                    
+                    switch(powerUp.type) {
+                        case 'invincible':
+                            player.powerUps.invincible = 3;
+                            break;
+                        case 'slow':
+                            // This would slow the other player, but for simplicity we'll just give invincibility
+                            player.powerUps.invincible = 2;
+                            break;
+                        case 'superJump':
+                            player.powerUps.superJump = 2;
+                            break;
+                    }
+                    
+                    // Remove from array
+                    const index = this.powerUps.indexOf(powerUp);
+                    if (index > -1) {
+                        this.powerUps.splice(index, 1);
+                    }
+                }
+            }
+            
+            checkGameOver() {
+                if (!this.leftPlayer.isAlive || !this.rightPlayer.isAlive) {
+                    this.gameState = 'gameOver';
+                    this.updateGameStateDisplay();
+                }
+            }
+            
+            updateUI() {
+                document.getElementById('leftDistance').textContent = Math.floor(this.leftPlayer.distance);
+                document.getElementById('rightDistance').textContent = Math.floor(this.rightPlayer.distance);
+                
+                // Update power-up indicators
+                const leftPowerUps = [];
+                const rightPowerUps = [];
+                
+                if (this.leftPlayer.powerUps.invincible > 0) leftPowerUps.push('🛡️');
+                if (this.leftPlayer.powerUps.superJump > 0) leftPowerUps.push('🪶');
+                if (this.rightPlayer.powerUps.invincible > 0) rightPowerUps.push('🛡️');
+                if (this.rightPlayer.powerUps.superJump > 0) rightPowerUps.push('🪶');
+                
+                document.getElementById('leftPowerUps').textContent = leftPowerUps.join(' ');
+                document.getElementById('rightPowerUps').textContent = rightPowerUps.join(' ');
+            }
+            
+            changeBiome() {
+                this.currentBiome = (this.currentBiome + 1) % this.biomes.length;
+                const newBiome = this.biomes[this.currentBiome];
+                
+                this.renderer.setClearColor(newBiome.sky);
+                this.scene.fog.color.setHex(newBiome.sky);
+                
+                // Update ground color (this is simplified - in a real game you'd transition more smoothly)
+                this.scene.children.forEach(child => {
+                    if (child.geometry && child.geometry.type === 'PlaneGeometry') {
+                        child.material.color.setHex(newBiome.ground);
+                    }
+                });
+            }
+            
+            animate() {
+                requestAnimationFrame(() => this.animate());
+                
+                const deltaTime = 1/60; // Fixed timestep for consistency
+                
+                if (this.gameState === 'playing') {
+                    this.gameTime += deltaTime;
+                    this.obstacleTimer += deltaTime;
+                    this.biomeTimer += deltaTime;
+                    this.powerUpTimer += deltaTime;
+                    
+                    // Spawn obstacles every 2 seconds
+                    if (this.obstacleTimer >= 2) {
+                        this.spawnObstacle();
+                        this.obstacleTimer = 0;
+                    }
+                    
+                    // Change biome every 30 seconds
+                    if (this.biomeTimer >= 30) {
+                        this.changeBiome();
+                        this.biomeTimer = 0;
+                    }
+                    
+                    // Spawn power-ups every 15-20 seconds
+                    if (this.powerUpTimer >= 15 + Math.random() * 5) {
+                        this.spawnPowerUp();
+                        this.powerUpTimer = 0;
+                    }
+                    
+                    this.handleInput();
+                    this.updatePlayers(deltaTime);
+                    this.updateObstacles(deltaTime);
+                    this.updatePowerUps(deltaTime);
+                    this.updateUI();
+                }
+                
+                // Render split screen
+                this.renderer.setViewport(0, 0, 750, 900);
+                this.renderer.setScissor(0, 0, 750, 900);
+                this.renderer.setScissorTest(true);
+                this.renderer.render(this.scene, this.leftCamera);
+                
+                this.renderer.setViewport(750, 0, 750, 900);
+                this.renderer.setScissor(750, 0, 750, 900);
+                this.renderer.setScissorTest(true);
+                this.renderer.render(this.scene, this.rightCamera);
+                
+                this.renderer.setScissorTest(false);
+            }
+        }
+        
+        // Initialize game when page loads
+        window.addEventListener('load', () => {
+            new MinecraftRunner();
+        });
+    </script>
+</body>
+</html>
