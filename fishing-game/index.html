@@ -1,0 +1,1128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Fishing Game</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(to bottom, #87CEEB 0%, #4682B4 100%);
+            font-family: 'Courier New', monospace;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+        
+        .game-container {
+            position: relative;
+            border: 4px solid #333;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+        
+        #gameCanvas {
+            display: block;
+            background: #87CEEB;
+            image-rendering: pixelated;
+            image-rendering: -moz-crisp-edges;
+            image-rendering: crisp-edges;
+        }
+        
+        .ui-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            pointer-events: none;
+            color: white;
+            text-shadow: 2px 2px 0px #000;
+        }
+        
+        .power-meter {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            width: 200px;
+            height: 20px;
+            background: rgba(0,0,0,0.5);
+            border: 2px solid #fff;
+            display: none;
+        }
+        
+        .power-fill {
+            height: 100%;
+            background: linear-gradient(to right, #ff0000 0%, #ffff00 50%, #00ff00 100%);
+            width: 200px;
+            background-size: 200px 100%;
+            transition: clip-path 0.1s;
+            clip-path: inset(0 100% 0 0);
+        }
+        
+        .inventory {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0,0,0,0.7);
+            padding: 12px;
+            border: 2px solid #fff;
+            border-radius: 5px;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+        
+        .stamina-bar {
+            width: 150px;
+            height: 12px;
+            background: rgba(0,0,0,0.5);
+            border: 1px solid #fff;
+            overflow: hidden;
+            margin-top: 8px;
+        }
+        
+        .stamina-fill {
+            height: 100%;
+            background: linear-gradient(to right, #ff0000 0%, #ffff00 50%, #00ff00 100%);
+            width: 150px;
+            background-size: 150px 100%;
+            transition: clip-path 0.3s;
+        }
+        
+        
+        .eat-button {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            pointer-events: auto;
+            display: none;
+        }
+        
+        .eat-button:hover {
+            background: #45a049;
+        }
+        
+        .eat-menu {
+            position: absolute;
+            bottom: 60px;
+            right: 20px;
+            background: rgba(0,0,0,0.9);
+            border: 2px solid #fff;
+            border-radius: 5px;
+            padding: 10px;
+            display: none;
+            pointer-events: auto;
+        }
+        
+        .fish-option {
+            display: block;
+            margin: 5px 0;
+            padding: 5px 10px;
+            background: #333;
+            color: white;
+            border: none;
+            cursor: pointer;
+            width: 100%;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .fish-option:hover {
+            background: #555;
+        }
+        
+        .fish-option:disabled {
+            background: #222;
+            color: #666;
+            cursor: not-allowed;
+        }
+        
+        .start-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            pointer-events: auto;
+            z-index: 1000;
+        }
+        
+        .start-screen h1 {
+            font-size: 48px;
+            margin-bottom: 30px;
+            text-shadow: 2px 2px 0px #000;
+        }
+        
+        .start-screen .game-description {
+            font-size: 18px;
+            line-height: 1.6;
+            max-width: 600px;
+            margin-bottom: 40px;
+        }
+        
+        .start-screen .controls {
+            font-size: 16px;
+            line-height: 1.4;
+            margin-bottom: 40px;
+        }
+        
+        .start-screen .start-prompt {
+            font-size: 24px;
+            animation: blink 1.5s infinite;
+        }
+        
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0.3; }
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <div class="start-screen" id="startScreen">
+            <h1>🎣 The Fishing Game</h1>
+            <div class="game-description">
+                Welcome to the peaceful waters! You're a fisher trying to catch as many fish as possible before running out of energy. Cast your line, reel in different types of fish, and manage your stamina wisely. Catching fish restores your energy, so keep fishing to stay alive!
+            </div>
+            <div class="controls">
+                <div><strong>Controls:</strong></div>
+                <div>🎣 Hold SPACEBAR to charge cast power</div>
+                <div>🎣 Release to cast your line</div>
+                <div>🎣 Hold SPACEBAR to reel in, release to let the lure sink</div>
+            </div>
+            <div class="start-prompt">Press SPACE to Start</div>
+        </div>
+        
+        <div class="ui-overlay">
+            <div class="power-meter" id="powerMeter">
+                <div class="power-fill" id="powerFill"></div>
+            </div>
+            
+            <div class="inventory" id="inventory">
+                <div>🐟 Small Fish: <span id="smallFishCount">0</span></div>
+                <div>🐠 Large Fish: <span id="largeFishCount">0</span></div>
+                <div>🦈 Sharks: <span id="sharkCount">0</span></div>
+                <div style="font-size: 12px; margin-top: 6px;">⚡ Stamina</div>
+                <div class="stamina-bar">
+                    <div class="stamina-fill" id="staminaFill"></div>
+                </div>
+            </div>
+            
+            
+            <button class="eat-button" id="eatButton">Eat Fish</button>
+            <div class="eat-menu" id="eatMenu">
+                <button class="fish-option" id="eatSmall">Eat Small Fish (+20 stamina)</button>
+                <button class="fish-option" id="eatLarge">Eat Large Fish (+40 stamina)</button>
+                <button class="fish-option" id="eatShark">Eat Shark (+60 stamina)</button>
+                <button class="fish-option" onclick="hideEatMenu()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Game variables
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Game state
+        const game = {
+            width: 800,
+            height: 600,
+            skyHeight: 60,          // 10% of 600px
+            dockWidth: 105,         // Reduced dock width
+            dockHeight: 120,        // Dock height
+            waterStartY: 180,       // Sky + dock + padding
+            waterPadding: 20,       // Padding between dock and water
+            running: false,
+            gameOver: false,
+            showingStartScreen: true,
+            lastTime: 0,
+            keys: {},
+            spacePressed: false,
+            spaceJustPressed: false,
+            spaceJustReleased: false
+        };
+        
+        // Player state  
+        const player = {
+            x: 56,                  // Positioned on dock (dock width now 105px)
+            y: 56,                  // Standing on top of dock line (skyHeight + 60 - player.height = 60 + 60 - 64 = 56)
+            width: 64,
+            height: 64,
+            animFrame: 0,
+            animTime: 0,
+            casting: false,
+            reeling: false
+        };
+        
+        // Fishing state
+        const fishing = {
+            castPower: 0,
+            maxPower: 100,
+            charging: false,
+            needsSpaceRelease: false, // Prevents auto-cast after reeling
+            line: {
+                cast: false,
+                inWater: false
+            },
+            lure: {
+                x: 0,
+                y: 0,
+                targetX: 0,
+                targetY: 0,
+                sinkSpeed: 0.3,
+                maxSinkSpeed: 2,
+                sinkAcceleration: 0.015,
+                reelSpeed: 1.5, // Reduced from 2
+                active: false,
+                castDistance: 0,
+                fishOnHook: null, // Fish that's been caught
+                escapeTimer: 0,
+                escapeTimeLimit: 1500 // 1.5 seconds in milliseconds
+            }
+        };
+        
+        // Fish system
+        const fishSystem = {
+            fish: [],
+            spawnTimer: 0,
+            spawnInterval: 2000, // Reduced spawn time
+            types: [
+                { type: 'small', width: 40, height: 30, speed: 1.2, detectionRange: 40, value: 1, staminaRestore: 10 }, // 0.5x cast cost
+                { type: 'large', width: 48, height: 36, speed: 0.8, detectionRange: 45, value: 3, staminaRestore: 30 }, // 1.5x cast cost  
+                { type: 'shark', width: 64, height: 48, speed: 0.64, detectionRange: 50, value: 5, staminaRestore: 60 } // 3x cast cost
+            ]
+        };
+        
+        // Inventory
+        const inventory = {
+            smallFish: 0,
+            largeFish: 0,
+            sharks: 0
+        };
+        
+        // Stamina system
+        const stamina = {
+            current: 100,
+            max: 100,
+            depleteTimer: 0,
+            depleteInterval: 15000,
+            depleteAmount: 5,
+            castCost: 20 // Stamina cost per cast (fish rewards now vary by type)
+        };
+        
+        // Sprites
+        const sprites = {
+            fisher: null,
+            fish: null,
+            loaded: 0,
+            total: 2
+        };
+        
+        // Initialize game
+        function init() {
+            loadSprites();
+            setupEventListeners();
+            
+            // Wait for sprites to load, then start the game loop but keep start screen visible
+            const checkLoaded = setInterval(() => {
+                if (sprites.loaded === sprites.total) {
+                    clearInterval(checkLoaded);
+                    game.lastTime = performance.now();
+                    gameLoop(); // Start the loop but keep start screen
+                }
+            }, 100);
+        }
+        
+        function loadSprites() {
+            sprites.fisher = new Image();
+            sprites.fisher.onload = () => {
+                sprites.loaded++;
+            };
+            sprites.fisher.onerror = (e) => {
+                console.error('Failed to load fisher sprite:', e);
+                sprites.loaded++; // Still increment to prevent infinite wait
+            };
+            sprites.fisher.src = 'assets/fisher.sprite.png';
+            
+            sprites.fish = new Image();
+            sprites.fish.onload = () => {
+                sprites.loaded++;
+            };
+            sprites.fish.onerror = (e) => {
+                console.error('Failed to load fish sprite:', e);  
+                sprites.loaded++; // Still increment to prevent infinite wait
+            };
+            sprites.fish.src = 'assets/fish2.sprite.png';
+        }
+        
+        function setupEventListeners() {
+            document.addEventListener('keydown', (e) => {
+                if (e.code === 'Space') {
+                    e.preventDefault();
+                    if (!game.spacePressed) {
+                        game.spaceJustPressed = true;
+                    }
+                    game.spacePressed = true;
+                }
+            });
+            
+            document.addEventListener('keyup', (e) => {
+                if (e.code === 'Space') {
+                    e.preventDefault();
+                    game.spacePressed = false;
+                    game.spaceJustReleased = true;
+                }
+            });
+            
+            // Eat fish buttons
+            document.getElementById('eatButton').addEventListener('click', showEatMenu);
+            document.getElementById('eatSmall').addEventListener('click', () => eatFish('small'));
+            document.getElementById('eatLarge').addEventListener('click', () => eatFish('large'));
+            document.getElementById('eatShark').addEventListener('click', () => eatFish('shark'));
+        }
+        
+        function startGame() {
+            game.showingStartScreen = false;
+            game.running = true;
+            game.lastTime = performance.now();
+            
+            // Hide start screen
+            document.getElementById('startScreen').style.display = 'none';
+            
+            // Clear space pressed state to prevent immediate casting
+            game.spacePressed = false;
+            game.spaceJustPressed = false;
+            game.spaceJustReleased = false;
+            fishing.needsSpaceRelease = false;
+            
+            // Spawn initial fish
+            for (let i = 0; i < 8; i++) {
+                spawnFish();
+            }
+            
+            gameLoop();
+        }
+        
+        function restartGame() {
+            // Reset game state
+            game.gameOver = false;
+            game.running = false;
+            game.showingStartScreen = true;
+            
+            // Show start screen again
+            document.getElementById('startScreen').style.display = 'flex';
+            
+            // Reset stamina
+            stamina.current = stamina.max;
+            stamina.depleteTimer = 0;
+            
+            // Reset inventory
+            inventory.smallFish = 0;
+            inventory.largeFish = 0;
+            inventory.sharks = 0;
+            
+            // Reset fishing state
+            resetFishing();
+            
+            // Clear fish
+            fishSystem.fish = [];
+        }
+        
+        function gameLoop(currentTime) {
+            const deltaTime = currentTime - game.lastTime;
+            game.lastTime = currentTime;
+            
+            update(deltaTime);
+            
+            // Only render game if not showing start screen
+            if (!game.showingStartScreen) {
+                render();
+            }
+            
+            // Reset input flags
+            game.spaceJustPressed = false;
+            game.spaceJustReleased = false;
+            
+            requestAnimationFrame(gameLoop);
+        }
+        
+        function update(deltaTime) {
+            // Handle start screen
+            if (game.showingStartScreen) {
+                if (game.spaceJustPressed) {
+                    startGame();
+                }
+                return;
+            }
+            
+            // Check for game over - only end game when stamina is 0 AND not actively fishing
+            if (stamina.current <= 0 && !game.gameOver && !fishing.line.cast) {
+                game.gameOver = true;
+                game.running = false;
+            }
+            
+            // Handle restart on game over
+            if (game.gameOver && game.spaceJustPressed) {
+                restartGame();
+                return;
+            }
+            
+            if (!game.gameOver && game.running) {
+                updatePlayer(deltaTime);
+                updateFishing(deltaTime);
+                updateFish(deltaTime);
+                updateStamina(deltaTime);
+            }
+            updateUI();
+        }
+        
+        function updatePlayer(deltaTime) {
+            // Simple animation
+            player.animTime += deltaTime;
+            if (player.animTime > 500) {
+                player.animFrame = (player.animFrame + 1) % 4;
+                player.animTime = 0;
+            }
+        }
+        
+        function updateFishing(deltaTime) {
+            // Check if we need to wait for spacebar release
+            if (fishing.needsSpaceRelease) {
+                if (!game.spacePressed) {
+                    fishing.needsSpaceRelease = false;
+                }
+                return; // Don't allow casting while waiting for release
+            }
+            
+            // Handle casting power
+            if (game.spacePressed && !fishing.line.cast && stamina.current > 0) {
+                fishing.charging = true;
+                fishing.castPower = Math.min(fishing.castPower + deltaTime * 0.1, fishing.maxPower);
+                document.getElementById('powerMeter').style.display = 'block';
+                const powerPercentage = fishing.castPower / fishing.maxPower;
+                document.getElementById('powerFill').style.clipPath = `inset(0 ${100 - (powerPercentage * 100)}% 0 0)`;
+            }
+            
+            // Cast line
+            if (game.spaceJustReleased && fishing.charging && !fishing.line.cast && stamina.current > 0) {
+                castLine();
+                fishing.charging = false;
+                document.getElementById('powerMeter').style.display = 'none';
+            } else if (game.spaceJustReleased) {
+                fishing.charging = false;
+                document.getElementById('powerMeter').style.display = 'none';
+            }
+            
+            // Update line and lure
+            if (fishing.line.cast) {
+                updateLure(deltaTime);
+            }
+        }
+        
+        function castLine() {
+            const power = fishing.castPower / fishing.maxPower;
+            const maxDistance = Math.min(game.width - 60, 650); // Increased max cast distance, reduced edge margin
+            const distance = power * maxDistance;
+            
+            // Cast to a point in the water (can be anywhere in water)
+            fishing.lure.targetX = player.x + 46 + distance; // Adjusted +6px from 40
+            fishing.lure.x = fishing.lure.targetX;
+            fishing.lure.y = game.waterStartY - 36; // Adjusted +4px from -40
+            fishing.lure.targetY = game.waterStartY - 36;
+            fishing.lure.castDistance = distance;
+            fishing.line.cast = true;
+            fishing.line.inWater = true;
+            fishing.lure.active = true;
+            fishing.lure.sinkSpeed = 0.5; // Reset sink speed for new cast
+            
+            // Reduce stamina for casting
+            stamina.current = Math.max(0, stamina.current - stamina.castCost);
+            
+            // Reset escaped flags for all fish (new cast means they can be caught again)
+            fishSystem.fish.forEach(f => f.escaped = false);
+            
+            fishing.castPower = 0;
+        }
+        
+        function updateLure(deltaTime) {
+            if (!fishing.lure.active) return;
+            
+            const rodTipX = player.x + 51; // Adjusted +6px from 45
+            const rodTipY = player.y + 14; // Adjusted +4px from 10
+            
+            // Handle fish on hook escape timer
+            if (fishing.lure.fishOnHook) {
+                if (game.spacePressed) {
+                    // Reset escape timer while reeling
+                    fishing.lure.escapeTimer = 0;
+                } else {
+                    // Increment escape timer when not reeling
+                    fishing.lure.escapeTimer += deltaTime;
+                    if (fishing.lure.escapeTimer > fishing.lure.escapeTimeLimit) {
+                        // Fish escapes - put it back in water at current lure position
+                        const escapedFish = {
+                            ...fishing.lure.fishOnHook,
+                            x: fishing.lure.x,
+                            y: fishing.lure.y,
+                            vx: (Math.random() - 0.5) * 2,
+                            vy: (Math.random() - 0.5) * 0.5,
+                            chasing: false,
+                            escaped: true // Flag to disable AI tracking until next cast
+                        };
+                        fishSystem.fish.push(escapedFish);
+                        fishing.lure.fishOnHook = null;
+                        fishing.lure.escapeTimer = 0;
+                    }
+                }
+            }
+            
+            // Lure controls
+            if (game.spacePressed) {
+                // Reel in - move toward player both horizontally and vertically
+                const distanceFromPlayer = Math.sqrt(
+                    Math.pow(fishing.lure.x - rodTipX, 2) + 
+                    Math.pow(fishing.lure.y - rodTipY, 2)
+                );
+                
+                if (distanceFromPlayer > 30) {
+                    const angle = Math.atan2(rodTipY - fishing.lure.y, rodTipX - fishing.lure.x);
+                    fishing.lure.targetX += Math.cos(angle) * fishing.lure.reelSpeed;
+                    fishing.lure.targetY += Math.sin(angle) * fishing.lure.reelSpeed;
+                } else {
+                    // Close enough to player
+                    if (fishing.lure.fishOnHook) {
+                        // Successfully caught the fish
+                        catchFish(fishing.lure.fishOnHook);
+                        fishing.lure.fishOnHook = null;
+                        fishing.lure.escapeTimer = 0;
+                    }
+                    resetFishing();
+                    return;
+                }
+            } else {
+                // Let sink straight down with accelerating speed
+                fishing.lure.sinkSpeed = Math.min(fishing.lure.maxSinkSpeed, fishing.lure.sinkSpeed + fishing.lure.sinkAcceleration);
+                fishing.lure.targetY = Math.min(game.height - 50, fishing.lure.targetY + fishing.lure.sinkSpeed);
+                // Don't change X position when sinking
+            }
+            
+            // Smooth lure movement
+            fishing.lure.x += (fishing.lure.targetX - fishing.lure.x) * 0.15;
+            fishing.lure.y += (fishing.lure.targetY - fishing.lure.y) * 0.15;
+        }
+        
+        function resetFishing() {
+            fishing.line.cast = false;
+            fishing.line.inWater = false;
+            fishing.lure.active = false;
+            fishing.lure.fishOnHook = null;
+            fishing.lure.escapeTimer = 0;
+            fishing.castPower = 0;
+            fishing.charging = false;
+            fishing.needsSpaceRelease = true; // Require spacebar release before next cast
+        }
+        
+        function updateFish(deltaTime) {
+            // Spawn fish
+            fishSystem.spawnTimer += deltaTime;
+            if (fishSystem.spawnTimer > fishSystem.spawnInterval) {
+                spawnFish();
+                fishSystem.spawnTimer = 0;
+            }
+            
+            // Update existing fish
+            fishSystem.fish.forEach((fish, index) => {
+                updateSingleFish(fish, deltaTime);
+                
+                // Check collision with lure (but not if fish has escaped)
+                if (fishing.lure.active && !fishing.lure.fishOnHook && !fish.escaped && checkCollision(fish, fishing.lure)) {
+                    // Fish gets on the hook instead of being immediately caught
+                    fishing.lure.fishOnHook = fish;
+                    fishing.lure.escapeTimer = 0;
+                    fishSystem.fish.splice(index, 1);
+                }
+                
+                // Remove fish that swim too far off screen
+                if (fish.x < -100 || fish.x > game.width + 100 || fish.y < game.waterStartY - 50) {
+                    fishSystem.fish.splice(index, 1);
+                }
+            });
+        }
+        
+        function spawnFish() {
+            // Weighted spawn rates: small fish frequently, medium sometimes, sharks rarely
+            const rand = Math.random();
+            let type;
+            if (rand < 0.7) { // 70% chance for small fish
+                type = fishSystem.types[0]; // small
+            } else if (rand < 0.95) { // 25% chance for large fish (95% - 70% = 25%)
+                type = fishSystem.types[1]; // large
+            } else { // 5% chance for shark (100% - 95% = 5%)
+                type = fishSystem.types[2]; // shark
+            }
+            
+            // Assign sprite index based on fish type (now 6 models total)
+            let spriteIndex;
+            if (type.type === 'small') {
+                spriteIndex = Math.floor(Math.random() * 3); // First 3 sprites are smaller fish
+            } else if (type.type === 'large') {
+                spriteIndex = 3 + Math.floor(Math.random() * 2); // Middle 2 sprites are larger fish
+            } else { // shark
+                spriteIndex = 5; // Last sprite is the shark
+            }
+            
+            // Give fish a random initial state so they start moving
+            const initialState = Math.random() < 0.5 ? 'left' : 'right';
+            const initialFacing = initialState === 'right';
+            
+            const fish = {
+                ...type,
+                x: 60 + Math.random() * (game.width - 120), // Spawn away from edges  
+                y: game.waterStartY + 60 + Math.random() * (game.height - game.waterStartY - 120), // Fish in water area
+                vx: initialState === 'left' ? -type.speed * 0.64 : type.speed * 0.64,
+                vy: (Math.random() - 0.5) * 0.5,
+                chasing: false,
+                spriteIndex: spriteIndex,
+                movementState: initialState, // Start swimming
+                stateChangeTimer: 0,
+                stateDuration: 2000 + Math.random() * 3000, // Initial swim: 2-5s
+                facingRight: initialFacing, // Track sprite orientation
+                targetVx: initialState === 'left' ? -type.speed * 0.64 : type.speed * 0.64, // Target velocity for easing
+                easeTimer: 0, // Timer for easing transitions
+                easeDuration: 1000 // 1 second easing transition
+            };
+            fishSystem.fish.push(fish);
+        }
+        
+        function updateSingleFish(fish, deltaTime) {
+            // Check if lure is nearby (but not if fish has escaped or if another fish is already on the hook)
+            if (fishing.lure.active && !fish.escaped && !fishing.lure.fishOnHook) {
+                const distance = Math.sqrt(
+                    Math.pow(fish.x - fishing.lure.x, 2) + 
+                    Math.pow(fish.y - fishing.lure.y, 2)
+                );
+                
+                if (distance < fish.detectionRange) {
+                    // Chase lure
+                    fish.chasing = true;
+                    const angle = Math.atan2(fishing.lure.y - fish.y, fishing.lure.x - fish.x);
+                    fish.vx = Math.cos(angle) * fish.speed;
+                    fish.vy = Math.sin(angle) * fish.speed;
+                } else {
+                    fish.chasing = false;
+                }
+            } else {
+                // Stop chasing if there's already a fish on the hook
+                fish.chasing = false;
+            }
+            
+            // State-based movement when not chasing
+            if (!fish.chasing) {
+                fish.stateChangeTimer += deltaTime;
+                fish.easeTimer += deltaTime;
+                
+                // Check if it's time to change state
+                if (fish.stateChangeTimer >= fish.stateDuration) {
+                    // Randomly choose next state
+                    const rand = Math.random();
+                    let newState;
+                    let newDuration;
+                    let newTargetVx;
+                    
+                    if (rand < 0.4) { // 40% chance for idle
+                        newState = 'idle';
+                        newDuration = 5000 + Math.random() * 5000; // 5-10s idle
+                        newTargetVx = 0; // Idle target is no horizontal movement
+                        // Keep current facing direction for idle
+                    } else if (rand < 0.7) { // 30% chance for swimming left
+                        newState = 'left';
+                        newDuration = 2000 + Math.random() * 3000; // 2-5s swimming
+                        newTargetVx = -fish.speed * 0.64; // Swimming left target
+                        fish.facingRight = false;
+                    } else { // 30% chance for swimming right
+                        newState = 'right';
+                        newDuration = 2000 + Math.random() * 3000; // 2-5s swimming
+                        newTargetVx = fish.speed * 0.64; // Swimming right target
+                        fish.facingRight = true;
+                    }
+                    
+                    fish.movementState = newState;
+                    fish.stateDuration = newDuration;
+                    fish.stateChangeTimer = 0;
+                    fish.targetVx = newTargetVx;
+                    fish.easeTimer = 0; // Reset easing timer for new state
+                }
+                
+                // Apply easing to horizontal velocity
+                const easeProgress = Math.min(fish.easeTimer / fish.easeDuration, 1);
+                let easeFactor;
+                
+                if (easeProgress < 1) {
+                    // Ease-in-out cubic function
+                    if (easeProgress < 0.5) {
+                        easeFactor = 4 * easeProgress * easeProgress * easeProgress; // Ease-in
+                    } else {
+                        const p = 2 * easeProgress - 2;
+                        easeFactor = 1 + p * p * p / 2; // Ease-out
+                    }
+                    
+                    // Interpolate between current vx and target vx
+                    fish.vx = fish.vx + (fish.targetVx - fish.vx) * easeFactor * 0.05;
+                } else {
+                    // Easing complete, use target velocity
+                    fish.vx = fish.targetVx;
+                }
+                
+                // Add small vertical variance based on state
+                if (fish.movementState === 'idle') {
+                    fish.vy += (Math.random() - 0.5) * 0.02; // Gentle floating movement
+                } else {
+                    fish.vy += (Math.random() - 0.5) * 0.04; // Small vertical variance while swimming
+                }
+                
+                // Clamp vertical velocity
+                const maxSpeedY = fish.speed * 0.32;
+                fish.vy = Math.max(-maxSpeedY, Math.min(maxSpeedY, fish.vy));
+            }
+            
+            // Update position
+            fish.x += fish.vx;
+            fish.y += fish.vy;
+            
+            // Keep fish in water area with boundary-aware state changes
+            if (fish.y < game.waterStartY + 20) {
+                fish.y = game.waterStartY + 20;
+                fish.vy = Math.abs(fish.vy); // Bounce down
+            } else if (fish.y > game.height - 20) {
+                fish.y = game.height - 20;
+                fish.vy = -Math.abs(fish.vy); // Bounce up
+            }
+            
+            // Handle horizontal boundaries by changing movement state and forcing immediate easing
+            if (fish.x < 60) {
+                fish.x = 60;
+                if (fish.movementState === 'left' || fish.targetVx < 0) {
+                    // If swimming left and hit left boundary, switch to swimming right
+                    fish.movementState = 'right';
+                    fish.facingRight = true;
+                    fish.stateChangeTimer = 0;
+                    fish.stateDuration = 2000 + Math.random() * 3000; // 2-5s swimming right
+                    fish.targetVx = fish.speed * 0.64; // Set new target
+                    fish.easeTimer = 0; // Reset easing for immediate direction change
+                    fish.vx = Math.max(0.1, fish.vx); // Force minimum rightward velocity
+                }
+            } else if (fish.x > game.width - 60) {
+                fish.x = game.width - 60;
+                if (fish.movementState === 'right' || fish.targetVx > 0) {
+                    // If swimming right and hit right boundary, switch to swimming left
+                    fish.movementState = 'left';
+                    fish.facingRight = false;
+                    fish.stateChangeTimer = 0;
+                    fish.stateDuration = 2000 + Math.random() * 3000; // 2-5s swimming left
+                    fish.targetVx = -fish.speed * 0.64; // Set new target
+                    fish.easeTimer = 0; // Reset easing for immediate direction change
+                    fish.vx = Math.min(-0.1, fish.vx); // Force minimum leftward velocity
+                }
+            }
+        }
+        
+        function checkCollision(fish, lure) {
+            return Math.abs(fish.x - lure.x) < 20 && Math.abs(fish.y - lure.y) < 20;
+        }
+        
+        function catchFish(fish) {
+            if (fish.type === 'small') inventory.smallFish++;
+            else if (fish.type === 'large') inventory.largeFish++;
+            else if (fish.type === 'shark') inventory.sharks++;
+            
+            // Restore stamina when catching fish (varies by fish type)
+            stamina.current = Math.min(stamina.max, stamina.current + fish.staminaRestore);
+            
+            // Spawn a new fish to replace the caught one
+            spawnFish();
+            
+            resetFishing();
+        }
+        
+        function updateStamina(deltaTime) {
+            stamina.depleteTimer += deltaTime;
+            if (stamina.depleteTimer > stamina.depleteInterval) {
+                stamina.current = Math.max(0, stamina.current - stamina.depleteAmount);
+                stamina.depleteTimer = 0;
+            }
+        }
+        
+        function updateUI() {
+            document.getElementById('smallFishCount').textContent = inventory.smallFish;
+            document.getElementById('largeFishCount').textContent = inventory.largeFish;
+            document.getElementById('sharkCount').textContent = inventory.sharks;
+            // Update stamina bar using clip-path to show percentage of full gradient
+            const staminaPercentage = stamina.current / stamina.max;
+            document.getElementById('staminaFill').style.clipPath = `inset(0 ${100 - (staminaPercentage * 100)}% 0 0)`;
+            
+            // Eat button removed - fish automatically restore stamina when caught
+        }
+        
+        function render() {
+            // Clear canvas
+            ctx.clearRect(0, 0, game.width, game.height);
+            
+            // Draw background
+            drawBackground();
+            
+            // Draw player
+            drawPlayer();
+            
+            // Draw fishing line and lure
+            if (fishing.line.cast) {
+                drawFishingLine();
+            }
+            
+            // Draw fish
+            fishSystem.fish.forEach(drawFish);
+            
+            // Show game over screen
+            if (game.gameOver) {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+                ctx.fillRect(0, 0, game.width, game.height);
+                
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = '48px Courier New';
+                ctx.textAlign = 'center';
+                ctx.fillText('GAME OVER', game.width / 2, game.height / 2 - 50);
+                
+                ctx.font = '24px Courier New';
+                ctx.fillText('You ran out of energy!', game.width / 2, game.height / 2);
+                ctx.fillText('Fish caught: ' + (inventory.smallFish + inventory.largeFish + inventory.sharks), game.width / 2, game.height / 2 + 40);
+                ctx.fillText('Press SPACE to restart', game.width / 2, game.height / 2 + 80);
+                
+                ctx.textAlign = 'left'; // Reset text alignment
+            }
+        }
+        
+        function drawBackground() {
+            // Sky area (10% of screen)
+            ctx.fillStyle = '#87CEEB';
+            ctx.fillRect(0, 0, game.width, game.skyHeight);
+            
+            // Single horizontal dock line (profile view)
+            ctx.strokeStyle = '#8B4513';
+            ctx.lineWidth = 8;
+            ctx.beginPath();
+            ctx.moveTo(0, game.skyHeight + 60); // Dock line position
+            ctx.lineTo(game.dockWidth, game.skyHeight + 60);
+            ctx.stroke();
+            
+            // Water area (single gradient to dark blue) - full width, starts after dock with padding
+            const waterGradient = ctx.createLinearGradient(0, game.waterStartY, 0, game.height);
+            waterGradient.addColorStop(0, '#4682B4');
+            waterGradient.addColorStop(1, '#0f172a');
+            ctx.fillStyle = waterGradient;
+            ctx.fillRect(0, game.waterStartY, game.width, game.height - game.waterStartY);
+        }
+        
+        function drawPlayer() {
+            if (!sprites.fisher) {
+                // Draw a simple character placeholder if sprite not loaded
+                ctx.fillStyle = '#8B4513';
+                ctx.fillRect(player.x, player.y, player.width, player.height);
+                return;
+            }
+            
+            // Fisher sprite sheet is 256x256 with 4 frames in 2x2 grid
+            const spriteSheetWidth = sprites.fisher.width;  // Should be 256
+            const spriteSheetHeight = sprites.fisher.height; // Should be 256
+            const spriteWidth = spriteSheetWidth / 2;  // 128px per frame
+            const spriteHeight = spriteSheetHeight / 2; // 128px per frame
+            
+            const frameX = (player.animFrame % 2) * spriteWidth;
+            const frameY = Math.floor(player.animFrame / 2) * spriteHeight;
+            
+            try {
+                // Crop 16px from the right side of the source sprite
+                const croppedWidth = spriteWidth - 16;
+                ctx.drawImage(
+                    sprites.fisher,
+                    frameX, frameY, croppedWidth, spriteHeight,
+                    player.x, player.y, player.width, player.height
+                );
+            } catch (e) {
+                // Fallback to colored rectangle
+                ctx.fillStyle = '#8B4513';
+                ctx.fillRect(player.x, player.y, player.width, player.height);
+            }
+        }
+        
+        function drawFishingLine() {
+            // Fishing rod tip position (end of fishing rod in sprite)
+            const rodTipX = player.x + 51; // Adjusted +6px from 45
+            const rodTipY = player.y + 14; // Adjusted +4px from 10
+            
+            ctx.strokeStyle = '#8B4513';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(rodTipX, rodTipY);
+            ctx.lineTo(fishing.lure.x, fishing.lure.y);
+            ctx.stroke();
+            
+            // Draw lure
+            ctx.fillStyle = '#FFD700';
+            ctx.beginPath();
+            ctx.arc(fishing.lure.x, fishing.lure.y, 4, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Draw fish on hook if present
+            if (fishing.lure.fishOnHook) {
+                const fish = fishing.lure.fishOnHook;
+                if (sprites.fish) {
+                    // Use same drawing logic as regular fish with 2x3 grid layout
+                    const spriteWidth = 512;     // Each fish is 512px wide
+                    const spriteHeight = 341.33; // Each fish is 341.33px tall
+                    
+                    const col = fish.spriteIndex % 2; // 0 or 1
+                    const row = Math.floor(fish.spriteIndex / 2); // 0, 1, or 2
+                    
+                    const frameX = col * spriteWidth;
+                    const frameY = row * spriteHeight;
+                    
+                    try {
+                        const fishX = fishing.lure.x - fish.width/2;
+                        const fishY = fishing.lure.y - fish.height/2;
+                        
+                        // Flip sprite horizontally when facing right
+                        if (fish.facingRight) {
+                            ctx.save();
+                            ctx.scale(-1, 1);
+                            ctx.drawImage(
+                                sprites.fish,
+                                frameX, frameY, spriteWidth, spriteHeight,
+                                -(fishX + fish.width), fishY, fish.width, fish.height
+                            );
+                            ctx.restore();
+                        } else {
+                            ctx.drawImage(
+                                sprites.fish,
+                                frameX, frameY, spriteWidth, spriteHeight,
+                                fishX, fishY, fish.width, fish.height
+                            );
+                        }
+                    } catch (e) {
+                        // Fallback to colored rectangle
+                        ctx.fillStyle = fish.type === 'small' ? '#00ff00' : fish.type === 'large' ? '#ffff00' : '#ff0000';
+                        ctx.fillRect(fishing.lure.x - fish.width/2, fishing.lure.y - fish.height/2, fish.width, fish.height);
+                    }
+                } else {
+                    // Fallback drawing
+                    ctx.fillStyle = fish.type === 'small' ? '#00ff00' : fish.type === 'large' ? '#ffff00' : '#ff0000';
+                    ctx.fillRect(fishing.lure.x - fish.width/2, fishing.lure.y - fish.height/2, fish.width, fish.height);
+                }
+            }
+        }
+        
+        function drawFish(fish) {
+            if (!sprites.fish) {
+                // Draw colored rectangle as fallback
+                ctx.fillStyle = fish.type === 'small' ? '#00ff00' : fish.type === 'large' ? '#ffff00' : '#ff0000';
+                ctx.fillRect(fish.x - fish.width/2, fish.y - fish.height/2, fish.width, fish.height);
+                return;
+            }
+            
+            // Fish sprite sheet is 1024x1024 with 6 models in 2 columns x 3 rows
+            // Each fish is 512x341.33 (1024/2 = 512 width, 1024/3 = 341.33 height)
+            const spriteWidth = 512;     // Each fish is 512px wide (1024/2)
+            const spriteHeight = 341.33; // Each fish is 341.33px tall (1024/3)
+            
+            // Fish arrangement: 2 columns x 3 rows
+            // Index 0: col 0, row 0  |  Index 1: col 1, row 0
+            // Index 2: col 0, row 1  |  Index 3: col 1, row 1  
+            // Index 4: col 0, row 2  |  Index 5: col 1, row 2
+            const col = fish.spriteIndex % 2; // 0 or 1
+            const row = Math.floor(fish.spriteIndex / 2); // 0, 1, or 2
+            
+            const frameX = col * spriteWidth;
+            const frameY = row * spriteHeight;
+            
+            try {
+                const fishX = fish.x - fish.width/2;
+                const fishY = fish.y - fish.height/2;
+                
+                // Flip sprite horizontally when facing right
+                if (fish.facingRight) {
+                    ctx.save();
+                    ctx.scale(-1, 1);
+                    ctx.drawImage(
+                        sprites.fish,
+                        frameX, frameY, spriteWidth, spriteHeight,
+                        -(fishX + fish.width), fishY, fish.width, fish.height
+                    );
+                    ctx.restore();
+                } else {
+                    ctx.drawImage(
+                        sprites.fish,
+                        frameX, frameY, spriteWidth, spriteHeight,
+                        fishX, fishY, fish.width, fish.height
+                    );
+                }
+            } catch (e) {
+                // Fallback to colored rectangle
+                ctx.fillStyle = fish.type === 'small' ? '#00ff00' : fish.type === 'large' ? '#ffff00' : '#ff0000';
+                ctx.fillRect(fish.x - fish.width/2, fish.y - fish.height/2, fish.width, fish.height);
+            }
+        }
+        
+        function showEatMenu() {
+            document.getElementById('eatMenu').style.display = 'block';
+            
+            // Update button states
+            document.getElementById('eatSmall').disabled = inventory.smallFish === 0;
+            document.getElementById('eatLarge').disabled = inventory.largeFish === 0;
+            document.getElementById('eatShark').disabled = inventory.sharks === 0;
+        }
+        
+        function hideEatMenu() {
+            document.getElementById('eatMenu').style.display = 'none';
+        }
+        
+        function eatFish(type) {
+            let fishType;
+            if (type === 'small' && inventory.smallFish > 0) {
+                inventory.smallFish--;
+                fishType = fishSystem.types.find(f => f.type === 'small');
+            } else if (type === 'large' && inventory.largeFish > 0) {
+                inventory.largeFish--;
+                fishType = fishSystem.types.find(f => f.type === 'large');
+            } else if (type === 'shark' && inventory.sharks > 0) {
+                inventory.sharks--;
+                fishType = fishSystem.types.find(f => f.type === 'shark');
+            }
+            
+            if (fishType) {
+                stamina.current = Math.min(stamina.max, stamina.current + fishType.hungerRestore);
+            }
+            
+            hideEatMenu();
+        }
+        
+        // Start the game
+        init();
+    </script>
+</body>
+</html>
