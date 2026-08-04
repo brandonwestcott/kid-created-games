@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Generate Placeholder Assets</title>
+</head>
+<body>
+    <canvas id="canvas" width="128" height="128"></canvas>
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        function createTileAsset(filename, color, pattern = 'solid') {
+            ctx.clearRect(0, 0, 128, 128);
+            
+            if (pattern === 'iso_floor') {
+                // Isometric floor tile
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                ctx.moveTo(64, 16);
+                ctx.lineTo(112, 48);
+                ctx.lineTo(64, 80);
+                ctx.lineTo(16, 48);
+                ctx.closePath();
+                ctx.fill();
+                
+                ctx.strokeStyle = '#000000';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            } else if (pattern === 'iso_wall') {
+                // Isometric wall tile
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                ctx.moveTo(16, 48);
+                ctx.lineTo(64, 16);
+                ctx.lineTo(112, 48);
+                ctx.lineTo(112, 96);
+                ctx.lineTo(64, 128);
+                ctx.lineTo(16, 96);
+                ctx.closePath();
+                ctx.fill();
+                
+                ctx.strokeStyle = '#000000';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            } else {
+                ctx.fillStyle = color;
+                ctx.fillRect(0, 0, 128, 128);
+            }
+            
+            // Download the canvas as PNG
+            const link = document.createElement('a');
+            link.download = filename;
+            link.href = canvas.toDataURL();
+            link.click();
+        }
+
+        function createSpriteSheet() {
+            canvas.width = 256;
+            canvas.height = 192;
+            ctx.clearRect(0, 0, 256, 192);
+            
+            // Create simple character sprites (32x48 each)
+            for (let row = 0; row < 4; row++) {
+                for (let col = 0; col < 8; col++) {
+                    const x = col * 32;
+                    const y = row * 48;
+                    
+                    // Character body
+                    ctx.fillStyle = '#4A90E2';
+                    ctx.fillRect(x + 8, y + 16, 16, 24);
+                    
+                    // Character head
+                    ctx.fillStyle = '#FFB84D';
+                    ctx.fillRect(x + 10, y + 8, 12, 12);
+                    
+                    // Simple animation variation
+                    if (col % 2 === 1) {
+                        ctx.fillStyle = '#FF6B35';
+                        ctx.fillRect(x + 6, y + 20, 4, 8); // Left arm
+                        ctx.fillRect(x + 22, y + 20, 4, 8); // Right arm
+                    }
+                }
+            }
+            
+            const link = document.createElement('a');
+            link.download = 'player.png';
+            link.href = canvas.toDataURL();
+            link.click();
+        }
+
+        function createPortalAsset(filename, color) {
+            canvas.width = 64;
+            canvas.height = 64;
+            ctx.clearRect(0, 0, 64, 64);
+            
+            // Outer ring
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.arc(32, 32, 28, 0, Math.PI * 2);
+            ctx.stroke();
+            
+            // Inner swirl pattern
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            for (let i = 0; i < 8; i++) {
+                const angle = (i / 8) * Math.PI * 2;
+                const startX = 32 + Math.cos(angle) * 15;
+                const startY = 32 + Math.sin(angle) * 15;
+                const endX = 32 + Math.cos(angle + Math.PI) * 8;
+                const endY = 32 + Math.sin(angle + Math.PI) * 8;
+                
+                ctx.beginPath();
+                ctx.moveTo(startX, startY);
+                ctx.lineTo(endX, endY);
+                ctx.stroke();
+            }
+            
+            const link = document.createElement('a');
+            link.download = filename;
+            link.href = canvas.toDataURL();
+            link.click();
+        }
+
+        // Generate assets
+        setTimeout(() => createTileAsset('floor_iso.png', '#CCCCCC', 'iso_floor'), 100);
+        setTimeout(() => createTileAsset('wall_iso.png', '#888888', 'iso_wall'), 200);
+        setTimeout(() => createPortalAsset('portal_orange.png', '#FF6B35'), 300);
+        setTimeout(() => createPortalAsset('portal_blue.png', '#4A90E2'), 400);
+        setTimeout(() => createSpriteSheet(), 500);
+    </script>
+</body>
+</html>

@@ -1,0 +1,29 @@
+{
+  "name": "portal-puzzle-game",
+  "version": "1.0.0",
+  "description": "2-player cooperative puzzle game with portal mechanics",
+  "main": "src/main.js",
+  "scripts": {
+    "dev": "webpack serve --mode development",
+    "build": "webpack --mode production",
+    "lint": "eslint src/",
+    "test": "node test/game.test.js",
+    "validate": "npm run lint && npm run test && npm run build"
+  },
+  "dependencies": {
+    "phaser": "^3.70.0"
+  },
+  "devDependencies": {
+    "webpack": "^5.88.0",
+    "webpack-cli": "^5.1.0",
+    "webpack-dev-server": "^4.15.0",
+    "html-webpack-plugin": "^5.5.0",
+    "css-loader": "^6.8.0",
+    "style-loader": "^3.3.0",
+    "eslint": "^8.44.0",
+    "jest": "^29.6.0"
+  },
+  "keywords": ["game", "phaser", "portal", "puzzle", "cooperative", "isometric"],
+  "author": "",
+  "license": "MIT"
+}

@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>🐶 Speed Run: Puppy Park Chase 🐢</title>
+<style>
+  /* ---- Grown-up note: everything is in this one file. ---- */
+  /* Colors, sizes, and messages are easy to tweak below.    */
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    overflow: hidden;
+    background: #7ec850; /* grassy park green */
+    font-family: 'Comic Sans MS', 'Comic Sans', cursive, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    touch-action: none;
+  }
+
+  /* The play area fills the screen */
+  #game {
+    display: block;
+    width: 100vw;
+    height: 100vh;
+    cursor: none; /* we draw our own puppy instead of the pointer */
+  }
+
+  /* The banner at the top with the helpful message */
+  #banner {
+    position: fixed;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(255,255,255,0.92);
+    color: #3a5a2a;
+    padding: 10px 22px;
+    border-radius: 999px;
+    font-size: clamp(18px, 3.2vw, 30px);
+    font-weight: bold;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+    text-align: center;
+    pointer-events: none;
+    z-index: 10;
+    max-width: 92vw;
+  }
+
+  /* "Warmer / Colder" sniff meter */
+  #sniffWrap {
+    position: fixed;
+    bottom: 18px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(80vw, 420px);
+    z-index: 10;
+    pointer-events: none;
+    text-align: center;
+  }
+  #sniffLabel {
+    color: #fff;
+    font-size: clamp(16px, 3vw, 24px);
+    font-weight: bold;
+    text-shadow: 1px 1px 3px rgba(0,0,0,0.4);
+    margin-bottom: 6px;
+  }
+  #sniffBarBg {
+    height: 26px;
+    background: rgba(255,255,255,0.45);
+    border-radius: 999px;
+    overflow: hidden;
+    box-shadow: inset 0 2px 6px rgba(0,0,0,0.2);
+  }
+  #sniffBar {
+    height: 100%;
+    width: 0%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #4fc3f7, #ffd54f, #ff7043);
+    transition: width 0.12s linear;
+  }
+
+  /* The mute button (big and chunky) */
+  #muteBtn {
+    position: fixed;
+    top: 12px;
+    right: 12px;
+    z-index: 20;
+    font-size: 28px;
+    background: rgba(255,255,255,0.92);
+    border: none;
+    border-radius: 16px;
+    padding: 8px 14px;
+    cursor: pointer;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.25);
+  }
+  #muteBtn:active { transform: scale(0.92); }
+
+  /* The big win / start screen overlay */
+  #overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(40, 80, 30, 0.78);
+    text-align: center;
+    padding: 20px;
+  }
+  #overlay h1 {
+    color: #fff;
+    font-size: clamp(32px, 8vw, 72px);
+    margin: 0 0 10px;
+    text-shadow: 3px 3px 0 #2e7d32, 6px 6px 12px rgba(0,0,0,0.35);
+  }
+  #overlay p {
+    color: #fff;
+    font-size: clamp(18px, 4vw, 30px);
+    margin: 6px 0 24px;
+    max-width: 700px;
+    text-shadow: 1px 1px 3px rgba(0,0,0,0.4);
+  }
+  /* Big, bright, chunky button */
+  .bigBtn {
+    font-family: inherit;
+    font-size: clamp(24px, 5vw, 40px);
+    font-weight: bold;
+    color: #fff;
+    background: linear-gradient(45deg, #ff6b6b, #ffa726);
+    border: none;
+    border-radius: 22px;
+    padding: 18px 40px;
+    cursor: pointer;
+    box-shadow: 0 8px 0 #c0392b, 0 12px 20px rgba(0,0,0,0.3);
+    transition: transform 0.08s;
+  }
+  .bigBtn:active {
+    transform: translateY(6px);
+    box-shadow: 0 2px 0 #c0392b, 0 6px 12px rgba(0,0,0,0.3);
+  }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+  <canvas id="game"></canvas>
+
+  <div id="banner">Sniff out the sneaky turtle! 🐢</div>
+
+  <div id="sniffWrap">
+    <div id="sniffLabel">🐾 Sniff Meter 🐾</div>
+    <div id="sniffBarBg"><div id="sniffBar"></div></div>
+  </div>
+
+  <button id="muteBtn" title="Sound on/off">🔊</button>
+
+  <!-- Start / Win screen -->
+  <div id="overlay">
+    <h1 id="overlayTitle">🐶 Puppy Park Chase 🐢</h1>
+    <p id="overlayText">
+      Move your zippy puppy with your mouse or finger.<br>
+      Sniff the bushes to find the sneaky turtle.<br>
+      When it zooms away — CHASE it and tag it! 🏃💨
+    </p>
+    <button id="playBtn" class="bigBtn">▶ Start Running!</button>
+  </div>
+
+<script>
+/* ===================================================================
+   SPEED RUN: PUPPY PARK CHASE
+   - You are a zippy puppy (follows your mouse / finger / arrow keys).
+   - A sneaky turtle hides behind one of 16 bushes in the park.
+   - Get close to sniff it out (the Sniff Meter fills up = warmer!).
+   - Touch the right bush and the turtle zooms to a new hiding spot.
+   - Catch (tag) the turtle while it is running to WIN!
+   - The turtle gets a little more tired each time, so you ALWAYS win
+     if you keep chasing. Gentle and forgiving. No "Game Over".
+   =================================================================== */
+
+// ---------- Easy-to-tweak settings for grown-ups ----------
+const NUM_BUSHES   = 16;     // the kid asked for sixteen bushes!
+const PUPPY_SPEED  = 0.18;   // how fast the puppy chases the pointer (0-1)
+const ARROW_SPEED  = 7;      // pixels per frame when using arrow keys
+const TURTLE_START_SPEED = 6.0; // turtle running speed at the start (zippy!)
+const TURTLE_TIRE  = 0.45;   // turtle loses this much speed each escape
+const TURTLE_MIN_SPEED   = 2.4; // turtle never gets slower than this
+const TAG_DISTANCE = 60;     // how close to tag the running turtle
+const FLEE_RANGE   = 130;    // turtle bolts as soon as the puppy gets THIS near
+const SNIFF_RANGE  = 260;    // how far away the sniff meter starts reacting
+// ----------------------------------------------------------
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const banner = document.getElementById('banner');
+const sniffBar = document.getElementById('sniffBar');
+const overlay = document.getElementById('overlay');
+const overlayTitle = document.getElementById('overlayTitle');
+const overlayText = document.getElementById('overlayText');
+const playBtn = document.getElementById('playBtn');
+const muteBtn = document.getElementById('muteBtn');
+
+let W = 0, H = 0;          // canvas size in pixels
+let bushes = [];           // {x, y} grid of bushes
+let puppy = { x: 0, y: 0, face: 1, wag: 0 };
+let pointer = { x: 0, y: 0 }; // where the puppy is heading
+let turtle = {
+  state: 'hiding',         // 'hiding' or 'running'
+  bush: 0,                 // index of bush it hides behind
+  x: 0, y: 0,
+  tx: 0, ty: 0,            // running target
+  speed: TURTLE_START_SPEED,
+  escapes: 0,
+  peek: 0                  // little wiggle/peek animation
+};
+let running = false;       // is a game in progress?
+let confetti = [];         // glitter + trophies for the win party
+let won = false;
+let timeT = 0;             // global animation clock
+const keys = {};           // arrow key state
+
+// ---------- Sound (Web Audio API, no files needed) ----------
+let audioCtx = null;
+let muted = false;
+function beep(freq, dur, type = 'sine', vol = 0.2) {
+  if (muted) return;
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = type;
+    o.frequency.value = freq;
+    g.gain.value = vol;
+    o.connect(g); g.connect(audioCtx.destination);
+    const now = audioCtx.currentTime;
+    g.gain.setValueAtTime(vol, now);
+    g.gain.exponentialRampToValueAtTime(0.001, now + dur);
+    o.start(now);
+    o.stop(now + dur);
+  } catch (e) { /* ignore audio errors */ }
+}
+function sniffSound()  { beep(420, 0.08, 'triangle', 0.12); }
+function escapeSound() { beep(600, 0.1, 'square', 0.15); beep(900, 0.12, 'square', 0.12); }
+function tagSound()    { beep(520, 0.12, 'sine', 0.2); }
+function winFanfare() {
+  // a happy little "ta-da!" tune
+  const notes = [523, 659, 784, 1047];
+  notes.forEach((f, i) => setTimeout(() => beep(f, 0.25, 'sine', 0.22), i * 140));
+}
+
+muteBtn.addEventListener('click', () => {
+  muted = !muted;
+  muteBtn.textContent = muted ? '🔇' : '🔊';
+});
+
+// ---------- Canvas sizing & bush layout ----------
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  layoutBushes();
+}
+window.addEventListener('resize', resize);
+
+// Lay 16 bushes out in a tidy 4x4 grid with comfy margins.
+function layoutBushes() {
+  bushes = [];
+  const cols = 4, rows = 4;
+  const marginX = W * 0.12;
+  const marginY = H * 0.18;
+  const gapX = (W - marginX * 2) / (cols - 1);
+  const gapY = (H - marginY * 2) / (rows - 1);
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      bushes.push({ x: marginX + c * gapX, y: marginY + r * gapY });
+    }
+  }
+}
+
+// ---------- Pointer / touch / keyboard controls ----------
+function setPointer(clientX, clientY) {
+  const rect = canvas.getBoundingClientRect();
+  pointer.x = clientX - rect.left;
+  pointer.y = clientY - rect.top;
+}
+canvas.addEventListener('mousemove', e => setPointer(e.clientX, e.clientY));
+canvas.addEventListener('touchstart', e => {
+  if (e.touches[0]) setPointer(e.touches[0].clientX, e.touches[0].clientY);
+}, { passive: true });
+canvas.addEventListener('touchmove', e => {
+  if (e.touches[0]) setPointer(e.touches[0].clientX, e.touches[0].clientY);
+}, { passive: true });
+
+document.addEventListener('keydown', e => {
+  keys[e.key] = true;
+  // arrow keys steer toward the edge so the puppy keeps moving that way
+});
+document.addEventListener('keyup', e => { keys[e.key] = false; });
+
+// ---------- Helpers ----------
+function dist(ax, ay, bx, by) {
+  return Math.hypot(ax - bx, ay - by);
+}
+function randInt(n) {
+  return Math.floor(Math.random() * n);
+}
+
+// Pick a new bush for the turtle (not the one it is at now).
+function pickNewBush(avoid) {
+  let i = avoid;
+  while (i === avoid) i = randInt(NUM_BUSHES);
+  return i;
+}
+
+// ---------- Start / restart a game ----------
+function startGame() {
+  resize();
+  // start the audio engine after a user tap (browsers require this)
+  if (!audioCtx) {
+    try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+    catch (e) {}
+  }
+  puppy.x = W / 2;
+  puppy.y = H / 2;
+  pointer.x = W / 2;
+  pointer.y = H / 2;
+  turtle.escapes = 0;
+  turtle.speed = TURTLE_START_SPEED;
+  turtle.state = 'hiding';
+  turtle.bush = randInt(NUM_BUSHES);
+  turtle.x = bushes[turtle.bush].x;
+  turtle.y = bushes[turtle.bush].y;
+  confetti = [];
+  won = false;
+  running = true;
+  overlay.classList.add('hidden');
+  banner.textContent = 'Sniff out the sneaky turtle! 🐢';
+}
+playBtn.addEventListener('click', startGame);
+
+// ---------- Win! ----------
+const WIN_MESSAGES = [
+  'YOU TAGGED THE TURTLE! 🎉',
+  'GOTCHA! Super puppy! 🐶',
+  'HOORAY! You found the turtle! 🏆'
+];
+function winGame() {
+  won = true;
+  running = false;
+  winFanfare();
+  // make it rain glitter and trophies!
+  for (let i = 0; i < 160; i++) {
+    confetti.push(makeGlitter());
+  }
+  overlayTitle.textContent = '🏆 YOU WIN! 🏆';
+  overlayText.textContent = WIN_MESSAGES[randInt(WIN_MESSAGES.length)];
+  playBtn.textContent = '▶ Play Again!';
+  overlay.classList.remove('hidden');
+}
+
+// Each glitter piece is either a sparkle or a trophy emoji.
+const GLITTER_COLORS = ['#ffd54f','#ff80ab','#80d8ff','#b388ff','#a5d6a7','#fff176'];
+function makeGlitter() {
+  const isTrophy = Math.random() < 0.35;
+  return {
+    x: Math.random() * W,
+    y: -Math.random() * H,            // start above the screen
+    vy: 2 + Math.random() * 4,
+    vx: (Math.random() - 0.5) * 2,
+    size: isTrophy ? 26 + Math.random() * 18 : 6 + Math.random() * 8,
+    spin: (Math.random() - 0.5) * 0.3,
+    angle: Math.random() * Math.PI * 2,
+    trophy: isTrophy,
+    color: GLITTER_COLORS[randInt(GLITTER_COLORS.length)]
+  };
+}
+
+// ---------- The main game loop ----------
+function update() {
+  timeT += 1;
+
+  // --- Move the puppy ---
+  if (running) {
+    // Arrow keys nudge the pointer target around.
+    if (keys['ArrowLeft'])  pointer.x -= ARROW_SPEED * 3;
+    if (keys['ArrowRight']) pointer.x += ARROW_SPEED * 3;
+    if (keys['ArrowUp'])    pointer.y -= ARROW_SPEED * 3;
+    if (keys['ArrowDown'])  pointer.y += ARROW_SPEED * 3;
+    pointer.x = Math.max(0, Math.min(W, pointer.x));
+    pointer.y = Math.max(0, Math.min(H, pointer.y));
+
+    // Puppy eases toward the pointer (smooth zippy chase).
+    const px = puppy.x;
+    puppy.x += (pointer.x - puppy.x) * PUPPY_SPEED;
+    puppy.y += (pointer.y - puppy.y) * PUPPY_SPEED;
+    if (Math.abs(puppy.x - px) > 0.5) puppy.face = (puppy.x - px) > 0 ? 1 : -1;
+    puppy.wag += 0.3;
+
+    updateTurtle();
+    updateSniffMeter();
+  }
+
+  // --- Update the win party glitter ---
+  for (const g of confetti) {
+    g.y += g.vy;
+    g.x += g.vx;
+    g.angle += g.spin;
+    if (g.y > H + 40) { // recycle so it keeps raining
+      g.y = -40;
+      g.x = Math.random() * W;
+    }
+  }
+
+  draw();
+  requestAnimationFrame(update);
+}
+
+function updateTurtle() {
+  if (turtle.state === 'hiding') {
+    // sit quietly at the bush — no peeking, it's a real mystery now!
+    const b = bushes[turtle.bush];
+    turtle.x = b.x;
+    turtle.y = b.y;
+    turtle.peek = 0;
+    const d = dist(puppy.x, puppy.y, b.x, b.y);
+
+    // Puppy got NEAR the hiding bush -> the turtle bolts away early!
+    if (d < FLEE_RANGE) {
+      startleTurtle();
+    }
+  } else if (turtle.state === 'running') {
+    // run toward the target bush
+    const dx = turtle.tx - turtle.x;
+    const dy = turtle.ty - turtle.y;
+    const d = Math.hypot(dx, dy);
+    if (d < turtle.speed + 1) {
+      // arrived -> hide again
+      turtle.x = turtle.tx;
+      turtle.y = turtle.ty;
+      turtle.state = 'hiding';
+      banner.textContent = 'It hid again! Sniff it out! 👃';
+    } else {
+      turtle.x += (dx / d) * turtle.speed;
+      turtle.y += (dy / d) * turtle.speed;
+    }
+    // CHASE: tag the turtle while it's out in the open!
+    if (dist(puppy.x, puppy.y, turtle.x, turtle.y) < TAG_DISTANCE) {
+      tagSound();
+      winGame();
+    }
+  }
+}
+
+function startleTurtle() {
+  turtle.escapes += 1;
+  escapeSound();
+  const newBush = pickNewBush(turtle.bush);
+  turtle.bush = newBush;
+  turtle.tx = bushes[newBush].x;
+  turtle.ty = bushes[newBush].y;
+  turtle.state = 'running';
+  // turtle gets a little more tired (slower) each time -> always winnable
+  turtle.speed = Math.max(TURTLE_MIN_SPEED, turtle.speed - TURTLE_TIRE);
+  // friendly, encouraging messages
+  if (turtle.escapes === 1) banner.textContent = 'There it goes! CHASE it! 🏃💨';
+  else if (turtle.speed <= TURTLE_MIN_SPEED) banner.textContent = "It's getting tired — TAG it! 🐢💤";
+  else banner.textContent = 'So close! Keep chasing! 💨';
+}
+
+// The sniff meter fills up the closer the puppy is to the turtle.
+function updateSniffMeter() {
+  const d = dist(puppy.x, puppy.y, turtle.x, turtle.y);
+  let pct = Math.max(0, 1 - d / SNIFF_RANGE) * 100;
+  if (turtle.state === 'running') pct = 100; // it's right there in the open!
+  sniffBar.style.width = pct.toFixed(0) + '%';
+}
+
+// ---------- Drawing ----------
+function draw() {
+  // park background
+  ctx.clearRect(0, 0, W, H);
+
+  // soft grass stripes for a cheerful park feel
+  for (let i = 0; i < H; i += 60) {
+    ctx.fillStyle = (i / 60) % 2 === 0 ? '#84d058' : '#7ec850';
+    ctx.fillRect(0, i, W, 60);
+  }
+
+  // draw bushes — all the same, no hints! The turtle is fully hidden.
+  for (let i = 0; i < bushes.length; i++) {
+    const b = bushes[i];
+    drawEmoji('🌳', b.x, b.y, 64);
+  }
+
+  // draw the turtle ONLY when it is running out in the open
+  if (turtle.state === 'running') {
+    drawEmoji('🐢', turtle.x, turtle.y, 48);
+  }
+
+  // draw the puppy (with a happy wag bounce)
+  const bounce = Math.sin(puppy.wag) * 3;
+  ctx.save();
+  ctx.translate(puppy.x, puppy.y + bounce);
+  ctx.scale(puppy.face, 1); // flip to face the way it runs
+  drawEmoji('🐶', 0, 0, 56);
+  ctx.restore();
+
+  // draw the win party glitter on top
+  for (const g of confetti) {
+    if (g.trophy) {
+      drawEmoji('🏆', g.x, g.y, g.size);
+    } else {
+      ctx.save();
+      ctx.translate(g.x, g.y);
+      ctx.rotate(g.angle);
+      ctx.fillStyle = g.color;
+      ctx.fillRect(-g.size / 2, -g.size / 2, g.size, g.size);
+      ctx.restore();
+    }
+  }
+}
+
+// Draw an emoji centered at (x, y).
+function drawEmoji(emoji, x, y, size) {
+  ctx.font = size + 'px serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(emoji, x, y);
+}
+
+// ---------- Boot it up ----------
+resize();
+update(); // start the render loop (overlay is showing the Start button)
+</script>
+</body>
+</html>

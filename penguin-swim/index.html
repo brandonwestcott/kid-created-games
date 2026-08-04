@@ -1,0 +1,1363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>🐧 Penguin Swim Race!</title>
+<style>
+  /* ============================================================
+     PENGUIN SWIM RACE
+     The penguin ALWAYS swims forward. You steer UP and DOWN to
+     dodge the electric eels and grab fish for a speed boost.
+     Press SPACE (or the big JUMP button) to leap over the
+     purple SUPER ELECTRIC eels that block the whole pool.
+     Three levels: Easy / Medium / Hard.
+     Grown-ups: all the tweakable numbers are in the DIFFS block
+     near the top of the JavaScript.
+     ============================================================ */
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    margin: 0;
+    padding: 10px;
+    background: linear-gradient(160deg, #0b3d91 0%, #1e88e5 45%, #4fc3f7 100%);
+    font-family: 'Comic Sans MS', 'Chalkboard SE', cursive, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    color: #05375f;
+    overflow-x: hidden;
+  }
+
+  h1 {
+    margin: 4px 0 8px;
+    font-size: clamp(1.4rem, 4vw, 2.4rem);
+    color: #fff;
+    text-shadow: 3px 3px 0 #0b3d91, 0 0 18px rgba(255,255,255,.4);
+    text-align: center;
+  }
+
+  /* ---------- the stage (canvas + overlays live inside) ---------- */
+  #stage {
+    position: relative;
+    width: min(100%, 980px);
+    aspect-ratio: 960 / 540;
+    border: 8px solid #fff;
+    border-radius: 22px;
+    overflow: hidden;
+    box-shadow: 0 12px 34px rgba(0,0,0,.35);
+    background: #1565c0;
+  }
+  canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: none; }
+
+  /* ---------- scoreboard row above the pool ---------- */
+  #hud {
+    width: min(100%, 980px);
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+  }
+  .chip {
+    background: rgba(255,255,255,.94);
+    border-radius: 999px;
+    padding: 6px 16px;
+    font-size: clamp(.85rem, 2.2vw, 1.3rem);
+    font-weight: bold;
+    box-shadow: 0 4px 0 rgba(0,0,0,.18);
+    white-space: nowrap;
+  }
+  #timeChip.low { background: #ffcdd2; color: #b71c1c; animation: pulse .5s infinite alternate; }
+  #fishChip.boosting { background: #fff59d; color: #e65100; animation: pulse .3s infinite alternate; }
+  @keyframes pulse { to { transform: scale(1.08); } }
+
+  #barWrap {
+    flex: 1 1 140px;
+    height: 22px;
+    background: rgba(255,255,255,.45);
+    border-radius: 999px;
+    overflow: hidden;
+    min-width: 100px;
+  }
+  #bar { height: 100%; width: 100%; background: linear-gradient(90deg,#66bb6a,#ffee58,#ef5350); transition: width .1s linear; }
+
+  /* ---------- big chunky buttons ---------- */
+  button {
+    font-family: inherit;
+    font-weight: bold;
+    border: none;
+    border-radius: 18px;
+    cursor: pointer;
+    transition: transform .08s;
+  }
+  button:active { transform: translateY(4px); }
+
+  .big {
+    font-size: clamp(1.05rem, 3vw, 1.6rem);
+    padding: 14px 32px;
+    background: linear-gradient(180deg,#ffd54f,#ffa000);
+    color: #4a2800;
+    box-shadow: 0 6px 0 #c77800;
+  }
+  .big.green { background: linear-gradient(180deg,#81c784,#388e3c); color: #fff; box-shadow: 0 6px 0 #1b5e20; }
+  .small { font-size: clamp(.8rem, 2.2vw, 1rem); padding: 9px 18px; background: #e0e0e0; color: #37474f; box-shadow: 0 4px 0 #9e9e9e; }
+
+  .icon {
+    font-size: clamp(1rem, 2.6vw, 1.4rem);
+    padding: 6px 14px;
+    background: #fff;
+    box-shadow: 0 4px 0 rgba(0,0,0,.18);
+    border-radius: 999px;
+  }
+
+  #jumpBtn {
+    margin-top: 12px;
+    width: min(100%, 980px);
+    font-size: clamp(1.2rem, 4vw, 2rem);
+    padding: 18px;
+    background: linear-gradient(180deg,#4fc3f7,#0277bd);
+    color: #fff;
+    box-shadow: 0 7px 0 #01579b;
+    letter-spacing: 2px;
+  }
+
+  /* ---------- difficulty picker ---------- */
+  #diffRow { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin: 10px 0 4px; }
+  .diffBtn {
+    font-size: clamp(.9rem, 2.6vw, 1.25rem);
+    padding: 12px 18px;
+    border-radius: 18px;
+    background: #eceff1;
+    color: #455a64;
+    box-shadow: 0 5px 0 #b0bec5;
+    border: 4px solid transparent;
+    line-height: 1.25;
+  }
+  .diffBtn small { display: block; font-size: .7em; font-weight: normal; opacity: .8; }
+  .diffBtn.sel { border-color: #ff6f00; transform: translateY(-2px) scale(1.05); }
+  .diffBtn[data-d="easy"].sel   { background: #c8e6c9; color: #1b5e20; box-shadow: 0 5px 0 #66bb6a; }
+  .diffBtn[data-d="medium"].sel { background: #bbdefb; color: #0d47a1; box-shadow: 0 5px 0 #42a5f5; }
+  .diffBtn[data-d="hard"].sel   { background: #ffcdd2; color: #b71c1c; box-shadow: 0 5px 0 #ef5350; }
+
+  /* ---------- overlay panels ---------- */
+  .overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 14px;
+    background: rgba(4, 40, 80, .55);
+    backdrop-filter: blur(2px);
+    text-align: center;
+  }
+  .overlay.hidden { display: none; }
+  /* The panel is a column: a scrolling middle part, and a button footer
+     that stays glued to the bottom so it never gets pushed off-screen. */
+  .panel {
+    background: rgba(255,255,255,.96);
+    border-radius: 24px;
+    padding: 14px 20px 12px;
+    max-width: 640px;
+    width: 100%;
+    max-height: 100%;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    box-shadow: 0 10px 28px rgba(0,0,0,.35);
+  }
+  .panelBody {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    min-height: 0;
+    -webkit-overflow-scrolling: touch;
+    /* soft fade at the bottom so it's clear the list keeps going */
+    -webkit-mask-image: linear-gradient(180deg, #000 calc(100% - 22px), transparent 100%);
+    mask-image: linear-gradient(180deg, #000 calc(100% - 22px), transparent 100%);
+    padding-bottom: 6px;
+  }
+  .panelFoot {
+    flex: 0 0 auto;
+    padding-top: 10px;
+    margin-top: 2px;
+    border-top: 3px dashed #b3e5fc;
+  }
+  .panel h2 { margin: 4px 0 6px; font-size: clamp(1.2rem, 3.6vw, 1.9rem); color: #0277bd; }
+  .panel p { margin: 5px 0; font-size: clamp(.8rem, 2.2vw, 1.05rem); line-height: 1.35; }
+  .keys { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin: 6px 0; }
+  .key { background: #e3f2fd; border: 3px solid #0277bd; border-radius: 12px; padding: 5px 11px; font-size: clamp(.72rem,2vw,.95rem); }
+
+  /* ---------- leaderboard ---------- */
+  table { width: 100%; border-collapse: collapse; margin-top: 4px; }
+  td { padding: 3px 8px; font-size: clamp(.78rem, 2.1vw, 1.05rem); }
+  tbody tr:nth-child(odd) { background: #e1f5fe; }
+  td.rank { width: 2.5em; }
+  td.time { text-align: right; font-weight: bold; }
+
+  #nameBox { display: flex; gap: 8px; justify-content: center; margin-top: 8px; flex-wrap: wrap; }
+  #nameInput {
+    font-family: inherit;
+    font-size: clamp(1rem, 3vw, 1.4rem);
+    padding: 9px 12px;
+    border: 4px solid #ffa000;
+    border-radius: 14px;
+    width: 11ch;
+    text-align: center;
+    text-transform: uppercase;
+  }
+  .medal { font-size: clamp(2.6rem, 10vw, 4.6rem); line-height: 1; animation: spin 2.2s ease-in-out infinite alternate; }
+  @keyframes spin { from { transform: rotate(-12deg) scale(1); } to { transform: rotate(12deg) scale(1.12); } }
+  .tiny { font-size: .8em; color: #607d8b; }
+  .btnRow { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+
+  /* ---------- game controller ---------- */
+  /* The orange glow that shows which menu button the controller is "on".
+     (Only ever added when a controller is actually being used.) */
+  .padFocus {
+    outline: 5px solid #ff6f00 !important;
+    outline-offset: 4px;
+    animation: padPulse .7s ease-in-out infinite alternate;
+  }
+  @keyframes padPulse { from { outline-color: #ff6f00; } to { outline-color: #ffd54f; } }
+  /* The 🎮 hint chip lights up green once a controller is plugged in */
+  #padKey { opacity: .55; }
+  #padKey.on { opacity: 1; background: #c8e6c9; border-color: #2e7d32; font-weight: bold; }
+</style>
+</head>
+<body>
+
+<h1>🐧 Penguin Swim Race!</h1>
+
+<!-- ================= SCOREBOARD ================= -->
+<div id="hud">
+  <div class="chip" id="timeChip">⏱️ 60.0s</div>
+  <div id="barWrap"><div id="bar"></div></div>
+  <div class="chip" id="distChip">🏁 0 / 50 m</div>
+  <div class="chip" id="fishChip">🐟 0</div>
+  <button class="icon" id="muteBtn" title="Sound on/off">🔊</button>
+</div>
+
+<!-- ================= THE POOL ================= -->
+<div id="stage">
+  <canvas id="game" width="960" height="540"></canvas>
+
+  <!-- START SCREEN -->
+  <div class="overlay" id="startScreen">
+    <div class="panel">
+     <div class="panelBody">
+      <h2>🐧 Pick Your Race!</h2>
+      <div id="diffRow">
+        <button class="diffBtn sel" data-d="easy">🐣 EASY<small>50 m · slow swim</small></button>
+        <button class="diffBtn" data-d="medium">🐧 MEDIUM<small>75 m · fast swim</small></button>
+        <button class="diffBtn" data-d="hard">🔥 HARD<small>100 m · super fast</small></button>
+      </div>
+      <p>Your penguin swims forward all by itself! You just steer <b>UP and DOWN</b>.</p>
+      <div class="keys">
+        <span class="key">🖱️ Move mouse up/down</span>
+        <span class="key">⬆️⬇️ Arrow keys</span>
+        <span class="key">👆 Drag your finger</span>
+        <span class="key">␣ SPACE = jump</span>
+        <span class="key" id="padKey">🎮 Stick/D-pad · Ⓐ = jump</span>
+      </div>
+      <p>⚡ <b>Eels</b> zap you — swim around them!<br>
+         💜 <b>SUPER eels</b> block the WHOLE pool — <b>JUMP</b> over them!<br>
+         🐟 <b>Grab fish</b> for a super speed boost!</p>
+      <div id="startBoard"></div>
+     </div>
+     <div class="panelFoot">
+      <button class="big green" id="startBtn">🏊 START!</button>
+     </div>
+    </div>
+  </div>
+
+  <!-- WIN SCREEN -->
+  <div class="overlay hidden" id="winScreen">
+    <div class="panel">
+     <div class="panelBody">
+      <div class="medal">🥇</div>
+      <h2 id="winTitle">YOU DID IT!</h2>
+      <p id="winTime" style="font-size:1.5em;color:#ef6c00;"><b>0.00 s</b></p>
+      <p id="winFish" class="tiny">🐟 0 fish caught</p>
+      <div id="newRecord" class="hidden">
+        <p>🌟 <b>NEW TOP 5 TIME!</b> Type your name:</p>
+        <div id="nameBox">
+          <input id="nameInput" maxlength="8" placeholder="NAME" autocomplete="off">
+          <button class="big" id="saveBtn">Save ⭐</button>
+        </div>
+      </div>
+      <div id="winBoard"></div>
+     </div>
+     <div class="panelFoot">
+      <div class="btnRow">
+        <button class="big green" id="againBtn">🔁 Race Again</button>
+        <button class="small" id="menuBtn1">🎚️ Change Level</button>
+      </div>
+     </div>
+    </div>
+  </div>
+
+  <!-- OUT OF TIME SCREEN (gentle!) -->
+  <div class="overlay hidden" id="timeScreen">
+    <div class="panel">
+     <div class="panelBody">
+      <div class="medal">🐧💦</div>
+      <h2>Good swimming!</h2>
+      <p id="timeMsg">You swam <b>0 meters</b>. So close — try again!</p>
+      <div id="timeBoard"></div>
+     </div>
+     <div class="panelFoot">
+      <div class="btnRow">
+        <button class="big green" id="retryBtn">🔁 Try Again</button>
+        <button class="small" id="menuBtn2">🎚️ Change Level</button>
+      </div>
+     </div>
+    </div>
+  </div>
+</div>
+
+<!-- Big chunky jump button (great for tablets, works everywhere) -->
+<button id="jumpBtn">⬆️ JUMP! (space)</button>
+
+<p style="color:#fff;text-align:center;margin:10px;font-size:.9rem;">
+  <a href="../index.html" style="color:#fff;">⬅️ Back to all games</a>
+</p>
+
+<script>
+/* ==================================================================
+   DIFFICULTY LEVELS — grown-ups: tweak these!
+     meters ....... how long the pool is
+     fwd .......... how fast the penguin swims forward (pixels/sec)
+     vert ......... how fast you can steer up and down
+     eelGap ....... meters between obstacles (smaller = more eels)
+     moverMul ..... how fast the up-and-down eels wiggle
+     seed ......... the course is the same every time, so races are fair
+   ================================================================== */
+const DIFFS = {
+  easy:   { key:'easy',   name:'Easy',   emoji:'🐣', meters: 50,  fwd:150, vert:300, jumpTime:1.15, eelGap:3.3, moverMul:0.75, seed:20250801 },
+  medium: { key:'medium', name:'Medium', emoji:'🐧', meters: 75,  fwd:240, vert:345, jumpTime:1.05, eelGap:3.3, moverMul:1.00, seed:20250802 },
+  hard:   { key:'hard',   name:'Hard',   emoji:'🔥', meters: 100, fwd:415, vert:470, jumpTime:0.95, eelGap:3.2, moverMul:1.30, seed:20250803 }
+};
+
+const CFG = {
+  RACE_SECONDS: 60,     // the countdown, same on every level
+  PX_PER_M: 90,         // drawing scale (pixels per meter)
+  JUMP_BOOST: 160,      // extra forward push while flying
+  STUN_TIME: 0.85,      // how long a zap stops you (seconds)
+  KNOCKBACK: 55,        // how far a zap pushes you back (pixels)
+  FISH_BOOST: 0.60,     // a fish makes you 60% faster
+  FISH_TIME: 3.0,       // boost lasts this many seconds
+  FISH_TIME_MAX: 6.0,   // boosts stack up to this much
+  LANES: 5
+};
+
+let diff = DIFFS.easy;   // the level we're playing right now
+
+const W = 960, H = 540;                 // logical canvas size
+const WATER_TOP = 70, WATER_BOT = 492;  // where the water is drawn
+const LANE_H = (WATER_BOT - WATER_TOP) / CFG.LANES;
+
+let FINISH_X = 0, WORLD_W = 0, CAM_MAX = 0;
+function computeWorld() {
+  FINISH_X = diff.meters * CFG.PX_PER_M;
+  WORLD_W  = FINISH_X + 220;
+  CAM_MAX  = Math.max(0, WORLD_W - W);
+}
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+
+/* ==================================================================
+   SOUND — all made with the Web Audio API, no sound files needed
+   ================================================================== */
+let audioCtx = null, muted = false;
+function AC() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+function tone(freq, dur, type = 'sine', vol = 0.18, slideTo = null) {
+  if (muted) return;
+  try {
+    const c = AC(), o = c.createOscillator(), g = c.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, c.currentTime);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, c.currentTime + dur);
+    g.gain.setValueAtTime(vol, c.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + dur);
+    o.connect(g); g.connect(c.destination);
+    o.start(); o.stop(c.currentTime + dur);
+  } catch (e) {}
+}
+function noiseBurst(dur = 0.25, vol = 0.15) {
+  if (muted) return;
+  try {
+    const c = AC(), len = Math.floor(c.sampleRate * dur);
+    const buf = c.createBuffer(1, len, c.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+    const s = c.createBufferSource(); s.buffer = buf;
+    const g = c.createGain(); g.gain.value = vol;
+    s.connect(g); g.connect(c.destination); s.start();
+  } catch (e) {}
+}
+const SFX = {
+  jump:  () => tone(420, 0.28, 'sine', 0.2, 900),
+  land:  () => noiseBurst(0.18, 0.12),
+  zap:   () => { tone(150, 0.35, 'sawtooth', 0.16, 60); noiseBurst(0.3, 0.12); },
+  fish:  () => { tone(880, 0.09, 'triangle', 0.18); setTimeout(()=>tone(1320,0.16,'triangle',0.18),85); },
+  start: () => { tone(523,0.12,'square',0.15); setTimeout(()=>tone(659,0.12,'square',0.15),130); setTimeout(()=>tone(784,0.25,'square',0.16),260); },
+  win:   () => [523,659,784,1046,1318].forEach((f,i)=>setTimeout(()=>tone(f,0.35,'triangle',0.2),i*130)),
+  sad:   () => { tone(400,0.25,'sine',0.14,300); setTimeout(()=>tone(300,0.4,'sine',0.14,220),240); },
+  save:  () => { tone(700,0.1,'square',0.14); setTimeout(()=>tone(1050,0.25,'square',0.15),110); }
+};
+
+/* ==================================================================
+   THE OBSTACLE COURSE
+   Built with a "seeded" random number maker, so every player racing
+   the same level gets exactly the same eels — fair for the leaderboard!
+     'still' = eel that stays put
+     'mover' = eel that swims up and down
+     'super' = SUPER ELECTRIC eel with arms out wide across the whole
+               pool — you MUST jump over this one
+   ================================================================== */
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function laneY(i) { return WATER_TOP + LANE_H * (i + 0.5); }
+
+let eels = [], fishes = [];
+
+function buildCourse() {
+  const rnd = mulberry32(diff.seed);
+  const plan = [];
+  let m = 5, sinceSuper = 0;
+
+  while (m < diff.meters - 3) {
+    const r = rnd();
+    if (sinceSuper >= 3 && r < 0.36) {
+      // SUPER eel — give extra room after it so you can land and get ready
+      plan.push({ m, type: 'super' });
+      sinceSuper = 0;
+      m += diff.eelGap * 1.6;
+    } else {
+      if (r < 0.62) {
+        const lane = Math.floor(rnd() * 5);
+        plan.push({ m, type: 'still', lane });
+        if (rnd() < 0.35) plan.push({ m, type: 'still', lane: (lane + 2 + Math.floor(rnd() * 2)) % 5 });
+      } else {
+        const lane = Math.floor(rnd() * 5);
+        let to = Math.floor(rnd() * 5);
+        if (to === lane) to = (lane + 2) % 5;
+        plan.push({ m, type: 'mover', lane, to, speed: (80 + rnd() * 60) * diff.moverMul });
+      }
+      sinceSuper++;
+      m += diff.eelGap;
+    }
+  }
+
+  eels = plan.map(o => {
+    const e = { type: o.type, x: o.m * CFG.PX_PER_M, phase: rnd() * 6.28 };
+    if (o.type === 'super') {
+      e.y = (WATER_TOP + WATER_BOT) / 2;
+      e.w = 46; e.h = WATER_BOT - WATER_TOP;
+    } else {
+      e.y = laneY(o.lane);
+      e.w = 74; e.h = 40;
+      if (o.type === 'mover') {
+        e.y0 = Math.min(laneY(o.lane), laneY(o.to));
+        e.y1 = Math.max(laneY(o.lane), laneY(o.to));
+        e.speed = o.speed;
+        e.dir = o.to > o.lane ? 1 : -1;
+      }
+    }
+    return e;
+  });
+
+  // ---- sprinkle fish in the gaps between eels ----
+  fishes = [];
+  const superXs = eels.filter(e => e.type === 'super').map(e => e.x);
+  for (let fm = 3; fm < diff.meters - 2; fm += 1.6) {
+    if (rnd() > 0.42) continue;                                   // not everywhere
+    const fx = fm * CFG.PX_PER_M;
+    if (superXs.some(sx => Math.abs(sx - fx) < 110)) continue;     // never inside a super eel
+    const lane = Math.floor(rnd() * 5);
+    const fy = laneY(lane);
+    // don't hide a fish right on top of a still eel
+    if (eels.some(e => e.type === 'still' && Math.abs(e.x - fx) < 70 && Math.abs(e.y - fy) < 34)) continue;
+    fishes.push({ x: fx, y: fy, phase: rnd() * 6.28, got: false });
+  }
+}
+
+/* ==================================================================
+   GAME STATE
+   ================================================================== */
+let state = 'menu';           // menu | playing | won | timeup
+let player, timeLeft, elapsed, bubbles, sparks, confetti, lastT, shake, fishCount;
+
+function resetGame() {
+  computeWorld();
+  buildCourse();
+  player = {
+    x: 45, y: laneY(2),
+    vy: 0,
+    jumpT: 0,        // >0 means flying through the air
+    cool: 0,         // small pause before you can jump again
+    buffer: 0,       // remembers an early jump press
+    stun: 0,         // >0 means you just got zapped
+    boost: 0,        // seconds of fish speed boost left
+    flap: 0          // flipper animation timer
+  };
+  timeLeft = CFG.RACE_SECONDS;
+  elapsed = 0;
+  fishCount = 0;
+  bubbles = []; sparks = []; confetti = [];
+  shake = 0;
+}
+
+/* ==================================================================
+   INPUT — mouse, arrow keys, and touch all steer UP and DOWN
+   ================================================================== */
+const keys = {};
+let pointerY = null, pointerActive = false;
+
+function canvasY(evt) {
+  const r = canvas.getBoundingClientRect();
+  return (evt.clientY - r.top) * (H / r.height);
+}
+canvas.addEventListener('pointermove', e => { pointerY = canvasY(e); pointerActive = true; });
+canvas.addEventListener('pointerdown', e => {
+  pointerY = canvasY(e); pointerActive = true;
+  canvas.setPointerCapture(e.pointerId);
+});
+canvas.addEventListener('pointerleave', () => { pointerActive = false; });
+
+window.addEventListener('keydown', e => {
+  keys[e.key] = true;
+  if (e.key.startsWith('Arrow')) e.preventDefault();   // stop the page scrolling
+  if (e.key === ' ' || e.code === 'Space') { e.preventDefault(); tryJump(); }
+  if (e.key === 'Enter' && state === 'menu') startGame();
+});
+window.addEventListener('keyup', e => { keys[e.key] = false; });
+
+document.getElementById('jumpBtn').addEventListener('click', tryJump);
+
+function tryJump() {
+  if (state !== 'playing') return;
+  // if you press a little too early we REMEMBER it and jump the moment we can
+  if (player.jumpT > 0 || player.cool > 0 || player.stun > 0) { player.buffer = 0.3; return; }
+  doJump();
+}
+function doJump() {
+  player.jumpT = diff.jumpTime;
+  player.buffer = 0;
+  SFX.jump();
+  for (let i = 0; i < 12; i++) addBubble(player.x, player.y, 2);
+}
+
+// how far forward the penguin travels during one whole jump — used to draw
+// the golden "take off here!" line in front of every SUPER eel
+function jumpDistance() {
+  let sp = diff.fwd;
+  if (player.boost > 0) sp *= (1 + CFG.FISH_BOOST);
+  return (sp + CFG.JUMP_BOOST) * diff.jumpTime;
+}
+
+/* ==================================================================
+   PARTICLES
+   ================================================================== */
+function addBubble(x, y, power = 1) {
+  bubbles.push({ x: x - 10, y: y + (Math.random()*20-10), r: 2 + Math.random()*5*power,
+                 vx: -30 - Math.random()*60, vy: -10 - Math.random()*30, life: .7 + Math.random()*.5 });
+}
+function addSpark(x, y, color) {
+  for (let i = 0; i < 18; i++) {
+    const a = Math.random() * Math.PI * 2, s = 80 + Math.random() * 220;
+    sparks.push({ x, y, vx: Math.cos(a)*s, vy: Math.sin(a)*s, life: .5, c: color || '255,241,118' });
+  }
+}
+function makeConfetti() {
+  const colors = ['#ff5252','#ffd740','#69f0ae','#40c4ff','#ea80fc','#ffab40'];
+  for (let i = 0; i < 220; i++) {
+    confetti.push({
+      x: Math.random()*W, y: -Math.random()*H - 20,
+      vx: (Math.random()-.5)*90, vy: 90 + Math.random()*190,
+      w: 7 + Math.random()*9, h: 10 + Math.random()*12,
+      rot: Math.random()*6.28, spin: (Math.random()-.5)*9,
+      c: colors[(Math.random()*colors.length)|0]
+    });
+  }
+}
+
+/* ==================================================================
+   UPDATE (runs ~60 times a second)
+   ================================================================== */
+function update(dt) {
+  if (state === 'won') { updateConfetti(dt); return; }
+  if (state !== 'playing') return;
+
+  timeLeft -= dt;
+  elapsed += dt;
+  if (timeLeft <= 0) { timeLeft = 0; endTimeUp(); return; }
+
+  const p = player;
+  p.flap += dt * 10;
+  if (p.cool > 0) p.cool -= dt;
+  if (p.boost > 0) p.boost -= dt;
+
+  /* ---- FORWARD: the penguin always swims ahead, no going backwards ---- */
+  if (p.stun > 0) {
+    p.stun -= dt;
+    p.x -= 30 * dt;                                  // tiny drift back while dizzy
+  } else {
+    let speed = diff.fwd;
+    if (p.boost > 0)   speed *= (1 + CFG.FISH_BOOST);
+    if (p.jumpT > 0)   speed += CFG.JUMP_BOOST;      // flying gives an extra push
+    p.x += speed * dt;
+
+    /* ---- UP / DOWN steering ---- */
+    let dy = 0, usingKeys = false;
+    if (keys['ArrowUp']   || keys['w'] || keys['W']) { dy -= 1; usingKeys = true; }
+    if (keys['ArrowDown'] || keys['s'] || keys['S']) { dy += 1; usingKeys = true; }
+
+    if (PAD.steer !== 0) {
+      p.vy = PAD.steer * diff.vert;      // controller wins while you're pushing the stick
+    } else if (usingKeys) {
+      p.vy = dy * diff.vert;
+    } else if (pointerActive && pointerY !== null) {
+      const d = pointerY - p.y;
+      p.vy = Math.abs(d) > 4 ? Math.max(-diff.vert, Math.min(diff.vert, d * 8)) : 0;
+    } else {
+      p.vy *= 0.85;
+    }
+    p.y += p.vy * dt;
+  }
+
+  // keep the penguin inside the pool
+  p.x = Math.max(20, Math.min(WORLD_W - 40, p.x));
+  p.y = Math.max(WATER_TOP + 24, Math.min(WATER_BOT - 24, p.y));
+
+  // bubble trail (extra bubbles while boosting!)
+  if (Math.random() < (p.boost > 0 ? 0.9 : 0.5)) addBubble(p.x, p.y, p.boost > 0 ? 1.6 : 1);
+
+  /* ---- jumping ---- */
+  if (p.jumpT > 0) {
+    p.jumpT -= dt;
+    if (p.jumpT <= 0) { p.jumpT = 0; p.cool = 0.2; SFX.land(); for (let i=0;i<10;i++) addBubble(p.x,p.y,2); }
+  }
+  // an early jump press we saved goes off as soon as the penguin is ready
+  if (p.buffer > 0) {
+    p.buffer -= dt;
+    if (p.jumpT <= 0 && p.cool <= 0 && p.stun <= 0) doJump();
+  }
+
+  /* ---- fish: swim into one for a speed boost! ---- */
+  for (const f of fishes) {
+    if (f.got) continue;
+    f.phase += dt * 3;
+    if (Math.abs(p.x - f.x) < 34 && Math.abs(p.y - f.y) < 30) {
+      f.got = true;
+      fishCount++;
+      p.boost = Math.min(CFG.FISH_TIME_MAX, p.boost + CFG.FISH_TIME);
+      addSpark(f.x, f.y, '255,167,38');
+      SFX.fish();
+    }
+  }
+
+  /* ---- eels ---- */
+  for (const e of eels) {
+    e.phase += dt * 4;
+    if (e.type === 'mover') {
+      e.y += e.dir * e.speed * dt;
+      if (e.y > e.y1) { e.y = e.y1; e.dir = -1; }
+      if (e.y < e.y0) { e.y = e.y0; e.dir = 1; }
+    }
+    // you can't be zapped while flying through the air, or right after a zap
+    if (p.jumpT > 0 || p.stun > 0) continue;
+    const hw = e.w / 2 - 4, hh = e.h / 2 - 4;
+    if (Math.abs(p.x - e.x) < hw + 18 && Math.abs(p.y - e.y) < hh + 16) {
+      p.stun = CFG.STUN_TIME;
+      p.boost = 0;                       // a zap knocks the fish boost out of you
+      p.x -= CFG.KNOCKBACK;
+      p.vy = 0;
+      shake = 0.35;
+      addSpark(p.x, p.y);
+      SFX.zap();
+    }
+  }
+
+  /* ---- finish line! ---- */
+  if (p.x >= FINISH_X) endWin();
+
+  /* ---- particles ---- */
+  bubbles = bubbles.filter(b => (b.life -= dt) > 0);
+  bubbles.forEach(b => { b.x += b.vx*dt; b.y += b.vy*dt; });
+  sparks = sparks.filter(s => (s.life -= dt) > 0);
+  sparks.forEach(s => { s.x += s.vx*dt; s.y += s.vy*dt; s.vy += 200*dt; });
+  if (shake > 0) shake -= dt;
+
+  updateHUD();
+}
+
+function updateConfetti(dt) {
+  confetti.forEach(c => { c.x += c.vx*dt; c.y += c.vy*dt; c.rot += c.spin*dt; if (c.y > H+30) c.y = -30; });
+}
+
+function camX() {
+  return Math.max(0, Math.min(CAM_MAX, player.x - 320));
+}
+
+/* ==================================================================
+   DRAWING
+   ================================================================== */
+let animT = 0;
+
+function draw() {
+  const cam = camX();
+  ctx.save();
+  if (shake > 0) ctx.translate((Math.random()-.5)*10, (Math.random()-.5)*10);
+
+  drawPool(cam);
+  fishes.forEach(f => drawFish(f, cam));
+  eels.forEach(e => drawEel(e, cam));
+  drawParticles(cam);
+  drawPenguin(cam);
+
+  ctx.restore();
+
+  if (state === 'won') drawConfetti();
+  drawSteerMarker(cam);
+}
+
+function drawPool(cam) {
+  // water
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, '#4fc3f7'); g.addColorStop(.5, '#1e88e5'); g.addColorStop(1, '#0d47a1');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+  // pool deck top & bottom
+  ctx.fillStyle = '#b3e5fc'; ctx.fillRect(0, 0, W, WATER_TOP);
+  ctx.fillRect(0, WATER_BOT, W, H - WATER_BOT);
+  ctx.fillStyle = '#81d4fa';
+  for (let x = -(cam % 60); x < W; x += 60) { ctx.fillRect(x, 0, 30, WATER_TOP); ctx.fillRect(x, WATER_BOT, 30, H - WATER_BOT); }
+
+  // wavy light on the water
+  ctx.strokeStyle = 'rgba(255,255,255,.16)'; ctx.lineWidth = 3;
+  for (let r = 0; r < 8; r++) {
+    ctx.beginPath();
+    const yBase = WATER_TOP + 24 + r * 56;
+    for (let x = 0; x <= W; x += 20) {
+      const y = yBase + Math.sin((x + cam) * 0.012 + animT * 1.6 + r) * 7;
+      x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+
+  // lane ropes (the floaty red-white balls)
+  for (let l = 0; l <= CFG.LANES; l++) {
+    const y = WATER_TOP + l * LANE_H;
+    for (let x = -(cam % 26); x < W + 26; x += 26) {
+      const idx = Math.floor((x + cam) / 26);
+      ctx.fillStyle = idx % 2 ? '#ffffff' : '#ef5350';
+      ctx.beginPath(); ctx.arc(x, y, 7, 0, 6.3); ctx.fill();
+    }
+  }
+
+  // meter markers (every 5 m on short pools, every 10 m on long ones)
+  const step = diff.meters <= 50 ? 5 : 10;
+  ctx.font = 'bold 22px Comic Sans MS, sans-serif';
+  ctx.textAlign = 'center';
+  for (let m = 0; m <= diff.meters; m += step) {
+    const x = m * CFG.PX_PER_M - cam;
+    if (x < -60 || x > W + 60) continue;
+    ctx.strokeStyle = 'rgba(255,255,255,.25)'; ctx.lineWidth = 3;
+    ctx.setLineDash([10, 12]); ctx.beginPath();
+    ctx.moveTo(x, WATER_TOP); ctx.lineTo(x, WATER_BOT); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = '#0277bd'; ctx.fillText(m + 'm', x, 44);
+  }
+
+  // start wall
+  const sx = -cam;
+  if (sx > -80) { ctx.fillStyle = '#0d47a1'; ctx.fillRect(sx - 80, WATER_TOP, 80, WATER_BOT - WATER_TOP); }
+
+  // FINISH wall — checkered!
+  const fx = FINISH_X - cam;
+  if (fx < W + 200 && fx > -200) {
+    for (let r = 0; r < 12; r++) for (let c = 0; c < 3; c++) {
+      ctx.fillStyle = (r + c) % 2 ? '#ffffff' : '#212121';
+      ctx.fillRect(fx + c * 36, WATER_TOP + r * ((WATER_BOT - WATER_TOP) / 12), 36, (WATER_BOT - WATER_TOP) / 12 + 1);
+    }
+    ctx.fillStyle = '#ffd740';
+    ctx.fillRect(fx - 6, 8, 120, 50);
+    ctx.fillStyle = '#4a2800'; ctx.font = 'bold 26px Comic Sans MS, sans-serif';
+    ctx.fillText('FINISH', fx + 54, 42);
+  }
+}
+
+/* ---- a friendly little fish that gives you a speed boost ---- */
+function drawFish(f, cam) {
+  if (f.got) return;
+  const x = f.x - cam;
+  if (x < -40 || x > W + 40) return;
+  const y = f.y + Math.sin(f.phase) * 6;
+  const wag = Math.sin(f.phase * 2.4) * 5;
+
+  ctx.save();
+  ctx.shadowColor = '#ffd54f'; ctx.shadowBlur = 14;
+  // tail
+  ctx.fillStyle = '#f57c00';
+  ctx.beginPath(); ctx.moveTo(x + 9, y); ctx.lineTo(x + 24, y - 9 + wag); ctx.lineTo(x + 24, y + 9 + wag); ctx.closePath(); ctx.fill();
+  // body
+  ctx.fillStyle = '#ffa726';
+  ctx.beginPath(); ctx.ellipse(x, y, 16, 10, 0, 0, 6.3); ctx.fill();
+  // fin
+  ctx.fillStyle = '#fb8c00';
+  ctx.beginPath(); ctx.moveTo(x, y - 9); ctx.lineTo(x + 6, y - 18); ctx.lineTo(x + 8, y - 8); ctx.closePath(); ctx.fill();
+  ctx.shadowBlur = 0;
+  // eye
+  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x - 8, y - 2, 4, 0, 6.3); ctx.fill();
+  ctx.fillStyle = '#333'; ctx.beginPath(); ctx.arc(x - 9, y - 2, 2, 0, 6.3); ctx.fill();
+  // sparkle
+  ctx.fillStyle = 'rgba(255,255,255,' + (0.4 + 0.4*Math.sin(f.phase*3)) + ')';
+  ctx.font = '16px sans-serif'; ctx.textAlign = 'center';
+  ctx.fillText('✨', x + 2, y - 20);
+  ctx.restore();
+}
+
+function drawEel(e, cam) {
+  const x = e.x - cam;
+  if (x < -140 || x > W + 140) return;
+
+  if (e.type === 'super') {
+    // ---- SUPER ELECTRIC EEL: arms out wide, blocks the whole pool ----
+    const pulse = 0.6 + 0.4 * Math.sin(e.phase * 2);
+    ctx.save();
+    ctx.shadowColor = '#e040fb'; ctx.shadowBlur = 30 * pulse;
+
+    ctx.strokeStyle = '#ba68c8'; ctx.lineWidth = 22; ctx.lineCap = 'round';
+    ctx.beginPath();
+    for (let y = WATER_TOP; y <= WATER_BOT; y += 12) {
+      const wob = Math.sin(y * 0.05 + e.phase) * 12;
+      y === WATER_TOP ? ctx.moveTo(x + wob, y) : ctx.lineTo(x + wob, y);
+    }
+    ctx.stroke();
+
+    // zappy lightning arms sticking out wide
+    ctx.strokeStyle = '#ffee58'; ctx.lineWidth = 4;
+    for (let y = WATER_TOP + 16; y < WATER_BOT; y += 34) {
+      ctx.beginPath();
+      ctx.moveTo(x - 4, y); ctx.lineTo(x - 20 * pulse, y - 9); ctx.lineTo(x - 34 * pulse, y + 5);
+      ctx.moveTo(x + 4, y); ctx.lineTo(x + 20 * pulse, y - 9); ctx.lineTo(x + 34 * pulse, y + 5);
+      ctx.stroke();
+    }
+
+    ctx.shadowBlur = 0;
+    for (let i = 0; i < 3; i++) {
+      const y = WATER_TOP + 70 + i * 140 + Math.sin(e.phase + i) * 8;
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x - 6, y, 6, 0, 6.3); ctx.arc(x + 6, y, 6, 0, 6.3); ctx.fill();
+      ctx.fillStyle = '#311b92'; ctx.beginPath(); ctx.arc(x - 6, y, 3, 0, 6.3); ctx.arc(x + 6, y, 3, 0, 6.3); ctx.fill();
+    }
+    ctx.restore();
+
+    /* ---- helpers so kids learn WHEN to press jump ----
+       jd = how far a jump carries you. If you take off anywhere between
+       the golden line and the eel, you sail right over it. ---- */
+    const dist = e.x - player.x;
+    if (state === 'playing' && dist > -60) {
+      const jd = jumpDistance();
+      const takeoff = x - (jd - 70);          // golden "take off here!" line
+      const inZone = dist > 45 && dist < jd - 70;
+
+      if (dist < jd + 320) {
+        // the golden takeoff line shimmering on the water
+        ctx.save();
+        ctx.strokeStyle = inZone ? 'rgba(255,235,59,.95)' : 'rgba(255,235,59,.35)';
+        ctx.lineWidth = inZone ? 7 : 4;
+        ctx.setLineDash([14, 12]);
+        ctx.lineDashOffset = -animT * 40;
+        ctx.beginPath(); ctx.moveTo(takeoff, WATER_TOP); ctx.lineTo(takeoff, WATER_BOT); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.restore();
+      }
+
+      ctx.textAlign = 'center';
+      if (inZone) {
+        // BIG bouncy JUMP NOW! right when pressing space will work
+        ctx.fillStyle = '#ffee58';
+        ctx.font = 'bold 34px Comic Sans MS, sans-serif';
+        ctx.fillText('⬆️ JUMP NOW!', x - 60, WATER_TOP - 14 + Math.sin(animT * 12) * 7);
+      } else if (dist > 0 && dist < jd + 320) {
+        // a gentle "get ready" while the eel is still far away
+        ctx.fillStyle = 'rgba(255,255,255,.8)';
+        ctx.font = 'bold 24px Comic Sans MS, sans-serif';
+        ctx.fillText('💜 get ready…', x - 60, WATER_TOP - 18);
+      }
+    }
+    return;
+  }
+
+  // ---- regular eels (yellow = stays still, green = wiggles up and down) ----
+  const y = e.y;
+  ctx.save();
+  ctx.shadowColor = '#ffff00'; ctx.shadowBlur = 16;
+  ctx.strokeStyle = e.type === 'mover' ? '#66bb6a' : '#cddc39';
+  ctx.lineWidth = 20; ctx.lineCap = 'round';
+  ctx.beginPath();
+  for (let i = -36; i <= 36; i += 6) {
+    const yy = y + Math.sin(i * 0.12 + e.phase) * 9;
+    i === -36 ? ctx.moveTo(x + i, yy) : ctx.lineTo(x + i, yy);
+  }
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  ctx.strokeStyle = '#fff59d'; ctx.lineWidth = 3;
+  for (let i = 0; i < 3; i++) {
+    const a = e.phase * 1.6 + i * 2.1, rr = 30 + Math.sin(e.phase * 3 + i) * 6;
+    ctx.beginPath();
+    ctx.moveTo(x + Math.cos(a) * 16, y + Math.sin(a) * 12);
+    ctx.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr * .7);
+    ctx.stroke();
+  }
+
+  const hx = x + 34, hy = y + Math.sin(36 * 0.12 + e.phase) * 9;
+  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(hx, hy - 5, 5, 0, 6.3); ctx.arc(hx, hy + 5, 5, 0, 6.3); ctx.fill();
+  ctx.fillStyle = '#333'; ctx.beginPath(); ctx.arc(hx + 1, hy - 5, 2.5, 0, 6.3); ctx.arc(hx + 1, hy + 5, 2.5, 0, 6.3); ctx.fill();
+  ctx.restore();
+}
+
+function drawPenguin(cam) {
+  const p = player;
+  const x = p.x - cam;
+  // how high we are in the air (0 = in water, 1 = top of the jump)
+  const jz = p.jumpT > 0 ? Math.sin((1 - p.jumpT / diff.jumpTime) * Math.PI) : 0;
+  const y = p.y - jz * 78;
+  const sc = 1 + jz * 0.28;
+
+  // whoosh lines behind you while the fish boost is on
+  if (p.boost > 0 && p.stun <= 0) {
+    ctx.strokeStyle = 'rgba(255,213,79,.85)'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+    for (let i = 0; i < 4; i++) {
+      const off = (animT * 500 + i * 40) % 90;
+      ctx.beginPath();
+      ctx.moveTo(x - 32 - off, y - 12 + i * 9);
+      ctx.lineTo(x - 62 - off, y - 12 + i * 9);
+      ctx.stroke();
+    }
+  }
+
+  // shadow on the water while flying
+  if (jz > 0.02) {
+    ctx.fillStyle = 'rgba(0,0,0,' + (0.25 * (1 - jz)) + ')';
+    ctx.beginPath(); ctx.ellipse(x, p.y + 6, 26 * (1 - jz * .4), 10 * (1 - jz * .4), 0, 0, 6.3); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.ellipse(x, p.y + 6, 24 + jz * 22, 9 + jz * 8, 0, 0, 6.3); ctx.stroke();
+  }
+
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(sc, sc);
+  if (p.stun > 0) {
+    ctx.rotate(Math.sin(p.stun * 40) * 0.35);       // wobble when zapped
+    ctx.globalAlpha = 0.5 + 0.5 * Math.abs(Math.sin(p.stun * 30));
+  } else {
+    ctx.rotate(-jz * 0.35);                          // lean forward mid-jump
+    if (p.boost > 0) { ctx.shadowColor = '#ffd54f'; ctx.shadowBlur = 22; }
+  }
+
+  const flap = Math.sin(p.flap) * 10;
+
+  ctx.fillStyle = '#37474f';                                                   // back flipper
+  ctx.beginPath(); ctx.ellipse(-6, 10 + flap * .4, 16, 7, .5, 0, 6.3); ctx.fill();
+  ctx.fillStyle = '#263238';                                                   // body
+  ctx.beginPath(); ctx.ellipse(0, 0, 27, 19, 0, 0, 6.3); ctx.fill();
+  ctx.fillStyle = '#ffffff';                                                   // tummy
+  ctx.beginPath(); ctx.ellipse(2, 4, 20, 12, 0, 0, 6.3); ctx.fill();
+  ctx.fillStyle = '#455a64';                                                   // front flipper
+  ctx.beginPath(); ctx.ellipse(-2, -6 - flap * .4, 15, 6, -.5, 0, 6.3); ctx.fill();
+  ctx.fillStyle = '#263238';                                                   // head
+  ctx.beginPath(); ctx.arc(20, -8, 14, 0, 6.3); ctx.fill();
+  ctx.fillStyle = '#ff4081';                                                   // swim cap
+  ctx.beginPath(); ctx.arc(20, -9, 14, Math.PI * 1.05, Math.PI * 2.05); ctx.fill();
+  ctx.fillStyle = '#00e5ff'; ctx.strokeStyle = '#006064'; ctx.lineWidth = 2;   // goggles
+  ctx.beginPath(); ctx.ellipse(26, -8, 7, 6, 0, 0, 6.3); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.ellipse(16, -9, 6, 5, 0, 0, 6.3); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = '#ffa726';                                                   // beak
+  ctx.beginPath(); ctx.moveTo(31, -2); ctx.lineTo(45, 1); ctx.lineTo(31, 5); ctx.closePath(); ctx.fill();
+
+  ctx.restore();
+
+  ctx.textAlign = 'center';
+  if (p.stun > 0) {
+    ctx.fillStyle = '#ffee58'; ctx.font = 'bold 30px Comic Sans MS, sans-serif';
+    ctx.fillText('⚡ ZAP!', x, y - 46);
+  } else if (p.boost > 0) {
+    ctx.fillStyle = '#ffd54f'; ctx.font = 'bold 24px Comic Sans MS, sans-serif';
+    ctx.fillText('ZOOM!', x, y - 44 - Math.sin(animT * 12) * 4);
+  }
+}
+
+function drawParticles(cam) {
+  bubbles.forEach(b => {
+    ctx.fillStyle = 'rgba(255,255,255,' + (b.life * .5) + ')';
+    ctx.beginPath(); ctx.arc(b.x - cam, b.y, b.r, 0, 6.3); ctx.fill();
+  });
+  sparks.forEach(s => {
+    ctx.fillStyle = 'rgba(' + s.c + ',' + (s.life * 2) + ')';
+    ctx.fillRect(s.x - cam - 2, s.y - 2, 5, 5);
+  });
+}
+
+function drawConfetti() {
+  confetti.forEach(c => {
+    ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(c.rot);
+    ctx.fillStyle = c.c; ctx.fillRect(-c.w/2, -c.h/2, c.w, c.h);
+    ctx.restore();
+  });
+}
+
+// a ring showing the depth your mouse/finger is asking for
+function drawSteerMarker(cam) {
+  if (state !== 'playing' || !pointerActive || pointerY === null) return;
+  const x = player.x - cam;
+  ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 3;
+  ctx.setLineDash([8, 10]);
+  ctx.beginPath(); ctx.moveTo(0, pointerY); ctx.lineTo(W, pointerY); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.beginPath(); ctx.arc(x, pointerY, 12 + Math.sin(animT * 6) * 3, 0, 6.3); ctx.stroke();
+}
+
+/* ==================================================================
+   HUD
+   ================================================================== */
+const timeChip = document.getElementById('timeChip');
+const distChip = document.getElementById('distChip');
+const fishChip = document.getElementById('fishChip');
+const bar = document.getElementById('bar');
+
+function updateHUD() {
+  timeChip.textContent = '⏱️ ' + timeLeft.toFixed(1) + 's';
+  timeChip.classList.toggle('low', timeLeft < 10);
+  const m = Math.min(diff.meters, Math.max(0, player.x / CFG.PX_PER_M));
+  distChip.textContent = '🏁 ' + m.toFixed(0) + ' / ' + diff.meters + ' m';
+  fishChip.textContent = player.boost > 0 ? '🐟 ' + fishCount + ' ⚡' + player.boost.toFixed(1) + 's' : '🐟 ' + fishCount;
+  fishChip.classList.toggle('boosting', player.boost > 0);
+  bar.style.width = (timeLeft / CFG.RACE_SECONDS * 100) + '%';
+}
+
+/* ==================================================================
+   LEADERBOARD — top 5 fastest times for EACH level, saved on this computer
+   ================================================================== */
+function lsKey() { return 'penguinSwimTop5_' + diff.key; }
+function loadBoard() {
+  try { return JSON.parse(localStorage.getItem(lsKey())) || []; } catch (e) { return []; }
+}
+function saveBoard(b) { try { localStorage.setItem(lsKey(), JSON.stringify(b)); } catch (e) {} }
+function isRecord(t) {
+  const b = loadBoard();
+  return b.length < 5 || t < b[b.length - 1].time;
+}
+function addScore(name, t, fish) {
+  const b = loadBoard();
+  b.push({ name: (name || 'SWIMMER').toUpperCase().slice(0, 8), time: t, fish: fish });
+  b.sort((a, c) => a.time - c.time);
+  saveBoard(b.slice(0, 5));
+}
+function boardHTML() {
+  const b = loadBoard();
+  let h = '<h2 style="font-size:1.05em;margin-top:12px;">🏆 Top 5 — ' + diff.emoji + ' ' + diff.name + ' (' + diff.meters + ' m)</h2>';
+  if (!b.length) return h + '<p class="tiny">No times on this level yet — be the first!</p>';
+  h += '<table><tbody>';
+  const medals = ['🥇','🥈','🥉','4️⃣','5️⃣'];
+  b.forEach((s, i) => {
+    h += `<tr><td class="rank">${medals[i]}</td><td>${escapeHTML(s.name)}</td>` +
+         `<td class="tiny">🐟${s.fish != null ? s.fish : '-'}</td>` +
+         `<td class="time">${s.time.toFixed(2)}s</td></tr>`;
+  });
+  return h + '</tbody></table>';
+}
+function escapeHTML(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function refreshBoards() {
+  ['startBoard','winBoard','timeBoard'].forEach(id => document.getElementById(id).innerHTML = boardHTML());
+}
+
+/* ==================================================================
+   SCREENS
+   ================================================================== */
+const startScreen = document.getElementById('startScreen');
+const winScreen   = document.getElementById('winScreen');
+const timeScreen  = document.getElementById('timeScreen');
+
+function show(el) { el.classList.remove('hidden'); }
+function hide(el) { el.classList.add('hidden'); }
+
+// difficulty picker buttons
+document.querySelectorAll('.diffBtn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.diffBtn').forEach(b => b.classList.remove('sel'));
+    btn.classList.add('sel');
+    diff = DIFFS[btn.dataset.d];
+    resetGame();        // rebuild the pool so you can see the new level behind the menu
+    refreshBoards();
+    updateHUD();
+    tone(600, 0.08, 'square', 0.12);
+  });
+});
+
+function goMenu() {
+  state = 'menu';
+  resetGame();
+  refreshBoards();
+  updateHUD();
+  hide(winScreen); hide(timeScreen); show(startScreen);
+}
+
+function startGame() {
+  resetGame();
+  hide(startScreen); hide(winScreen); hide(timeScreen);
+  state = 'playing';
+  updateHUD();
+  SFX.start();
+  try { AC().resume(); } catch (e) {}
+}
+
+function endWin() {
+  state = 'won';
+  makeConfetti();
+  SFX.win();
+  const t = elapsed;
+  document.getElementById('winTime').innerHTML = '<b>' + t.toFixed(2) + ' seconds</b> ' + diff.emoji + ' ' + diff.name;
+  document.getElementById('winFish').textContent = '🐟 ' + fishCount + ' fish caught!';
+  const rec = document.getElementById('newRecord');
+  if (isRecord(t)) {
+    rec.classList.remove('hidden');
+    document.getElementById('nameInput').value = '';
+    document.getElementById('winTitle').textContent = 'NEW RECORD! 🌟';
+    setTimeout(() => document.getElementById('nameInput').focus(), 200);
+  } else {
+    rec.classList.add('hidden');
+    document.getElementById('winTitle').textContent = 'YOU DID IT! 🎉';
+  }
+  refreshBoards();
+  show(winScreen);
+}
+
+function endTimeUp() {
+  state = 'timeup';
+  SFX.sad();
+  const m = Math.min(diff.meters, player.x / CFG.PX_PER_M);
+  const pct = m / diff.meters;
+  document.getElementById('timeMsg').innerHTML =
+    'You swam <b>' + m.toFixed(0) + ' meters</b> and caught <b>' + fishCount + ' 🐟</b>! ' +
+    (pct > 0.85 ? 'Sooo close to the wall!' : pct > 0.5 ? 'More than halfway — nice!' : 'Great start!') +
+    ' Give it another go! 🐧';
+  refreshBoards();
+  show(timeScreen);
+  updateHUD();
+}
+
+document.getElementById('startBtn').addEventListener('click', startGame);
+document.getElementById('againBtn').addEventListener('click', startGame);
+document.getElementById('retryBtn').addEventListener('click', startGame);
+document.getElementById('menuBtn1').addEventListener('click', goMenu);
+document.getElementById('menuBtn2').addEventListener('click', goMenu);
+
+document.getElementById('saveBtn').addEventListener('click', saveName);
+document.getElementById('nameInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') saveName();
+  e.stopPropagation();  // don't let SPACE in the name box trigger a jump
+});
+function saveName() {
+  const inp = document.getElementById('nameInput');
+  addScore(inp.value.trim() || 'SWIMMER', elapsed, fishCount);
+  SFX.save();
+  document.getElementById('newRecord').classList.add('hidden');
+  refreshBoards();
+}
+
+/* mute button */
+document.getElementById('muteBtn').addEventListener('click', () => {
+  muted = !muted;
+  document.getElementById('muteBtn').textContent = muted ? '🔇' : '🔊';
+  if (!muted) SFX.jump();
+});
+
+/* ==================================================================
+   GAME CONTROLLER (Xbox / PlayStation / any USB or Bluetooth pad)
+   ------------------------------------------------------------------
+   This uses the browser's built-in Gamepad API, so it works in Edge on
+   an Xbox, in Chrome on a PC with a controller plugged in, etc.
+
+   WHILE RACING:   left stick up/down or D-pad = steer.  A = jump.
+   IN THE MENUS:   stick/D-pad = move the orange glow between buttons,
+                   A = press it, B = go back, Y = mute.
+
+   GROWN-UP NOTE: browsers only hand over a gamepad AFTER the player
+   presses a button on it, so the 🎮 chip stays grey until then.
+   ================================================================== */
+
+// Older Edge on Xbox pretends the controller is a mouse. This asks it for
+// real gamepad data instead. It is simply ignored by every other browser.
+try { if ('gamepadInputEmulation' in navigator) navigator.gamepadInputEmulation = 'gamepad'; } catch (e) {}
+
+// Standard button numbers (the "standard gamepad mapping" every browser uses)
+const BTN = { A: 0, B: 1, X: 2, Y: 3, START: 9, DUP: 12, DDOWN: 13, DLEFT: 14, DRIGHT: 15 };
+const DEADZONE = 0.35;          // ignore tiny stick wobbles
+const PAD = { on: false, steer: 0, prev: {} };
+
+function getPad() {
+  const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+  for (const p of pads) if (p && p.connected) return p;
+  return null;
+}
+function held(pad, i) { return !!(pad.buttons[i] && pad.buttons[i].pressed); }
+
+function pollGamepad() {
+  const pad = getPad();
+  if (!pad) {
+    if (PAD.on) { PAD.on = false; PAD.steer = 0; PAD.prev = {}; padClearGlow(); }
+    padKeyChip();
+    return;
+  }
+  if (!PAD.on) { PAD.on = true; padKeyChip(); }
+
+  const ly = pad.axes.length > 1 ? pad.axes[1] : 0;   // -1 is up, +1 is down
+  const lx = pad.axes.length > 0 ? pad.axes[0] : 0;
+  const dUp = held(pad, BTN.DUP), dDown = held(pad, BTN.DDOWN);
+
+  /* Steering: the D-pad is full speed, the stick is smooth (push a
+     little = drift slowly, push all the way = zoom). */
+  if (dUp)        PAD.steer = -1;
+  else if (dDown) PAD.steer = 1;
+  else if (Math.abs(ly) > DEADZONE) {
+    const amount = (Math.abs(ly) - DEADZONE) / (1 - DEADZONE);   // 0 → 1
+    PAD.steer = Math.sign(ly) * (0.45 + 0.55 * amount);          // never slower than 45%
+  } else PAD.steer = 0;
+
+  // what is held down RIGHT NOW
+  const now = {
+    A: held(pad, BTN.A), B: held(pad, BTN.B), Y: held(pad, BTN.Y),
+    START: held(pad, BTN.START),
+    up:    dUp   || ly < -DEADZONE,
+    down:  dDown || ly >  DEADZONE,
+    left:  held(pad, BTN.DLEFT)  || lx < -DEADZONE,
+    right: held(pad, BTN.DRIGHT) || lx >  DEADZONE
+  };
+  // "tap" = pressed on THIS frame but not the last one (so holding A
+  // doesn't fire a hundred jumps a second)
+  const tap = k => now[k] && !PAD.prev[k];
+
+  if (tap('Y')) document.getElementById('muteBtn').click();
+
+  if (state === 'playing') {
+    // the race started — take the orange menu glow away
+    if (padPanelWas) { padPanelWas = null; padIdx = -1; padClearGlow(); }
+    if (tap('A') || tap('START')) tryJump();
+  } else {
+    padMenu(tap);
+  }
+  PAD.prev = now;
+
+  // a button press is our best chance to wake the sound up
+  if (tap('A') || tap('START')) { try { AC().resume(); } catch (e) {} }
+}
+
+function padKeyChip() {
+  const chip = document.getElementById('padKey');
+  if (chip) chip.classList.toggle('on', PAD.on);
+}
+
+/* ---- moving the orange glow around the menus ---- */
+let padIdx = -1, padPanelWas = null;
+
+function padPanel() {
+  if (!startScreen.classList.contains('hidden')) return startScreen;
+  if (!winScreen.classList.contains('hidden'))   return winScreen;
+  if (!timeScreen.classList.contains('hidden'))  return timeScreen;
+  return null;
+}
+function padItems(panel) {
+  // every button / text box you can actually see in the open panel
+  return [...panel.querySelectorAll('button, input')].filter(el => el.offsetParent !== null);
+}
+function padClearGlow() {
+  document.querySelectorAll('.padFocus').forEach(el => el.classList.remove('padFocus'));
+}
+function padGlow(items) {
+  padClearGlow();
+  const el = items[padIdx];
+  if (el) {
+    el.classList.add('padFocus');
+    el.scrollIntoView({ block: 'nearest' });   // scrolls the leaderboard for you
+  }
+}
+
+function padMenu(tap) {
+  const panel = padPanel();
+  if (!panel) { padPanelWas = null; padIdx = -1; padClearGlow(); return; }
+
+  // typing your name? let the Xbox on-screen keyboard have the controller.
+  const nameInput = document.getElementById('nameInput');
+  if (document.activeElement === nameInput) {
+    if (tap('B')) nameInput.blur();
+    return;
+  }
+
+  const items = padItems(panel);
+  if (!items.length) return;
+
+  // new panel just opened → start on the big green button at the bottom
+  if (panel !== padPanelWas || padIdx < 0 || padIdx >= items.length) {
+    padPanelWas = panel;
+    const primary = items.findIndex(el => el.classList.contains('green'));
+    padIdx = primary >= 0 ? primary : 0;
+    padGlow(items);
+  }
+
+  if (tap('down') || tap('right')) { padIdx = (padIdx + 1) % items.length; padGlow(items); tone(520, .05, 'square', .1); }
+  if (tap('up')   || tap('left'))  { padIdx = (padIdx - 1 + items.length) % items.length; padGlow(items); tone(440, .05, 'square', .1); }
+
+  if (tap('A') || tap('START')) {
+    const el = items[padIdx];
+    if (el.tagName === 'INPUT') el.focus();   // pops open the on-screen keyboard
+    else el.click();
+  }
+  if (tap('B')) {
+    // B = the "go back / change level" button, if this panel has one
+    const back = items.find(el => el.id === 'menuBtn1' || el.id === 'menuBtn2');
+    if (back) back.click();
+  }
+}
+
+window.addEventListener('gamepadconnected', () => { PAD.on = true; padKeyChip(); });
+window.addEventListener('gamepaddisconnected', () => { PAD.on = false; padKeyChip(); padClearGlow(); });
+
+/* ==================================================================
+   MAIN LOOP
+   ================================================================== */
+function loop(t) {
+  if (!lastT) lastT = t;
+  let dt = (t - lastT) / 1000;
+  lastT = t;
+  if (dt > 0.06) dt = 0.06;   // don't let a slow frame teleport anyone
+  animT += dt;
+  pollGamepad();              // the controller has to be checked every frame
+  update(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+
+resetGame();
+refreshBoards();
+updateHUD();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

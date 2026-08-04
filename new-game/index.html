@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shark Scroller</title>
+  <link rel="stylesheet" href="style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+  <div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+    <div id="score-display">Score: <span id="score-value">0</span></div>
+    <div id="game-over" class="hidden">
+      <h1>Game Over</h1>
+      <p>Final Score: <span id="final-score">0</span></p>
+      <button id="restart-btn">Play Again</button>
+    </div>
+  </div>
+
+  <!-- Load Game Assets (hidden) -->
+  <div style="display: none;">
+    <img id="player-img" src="main_shark.png" alt="Player Shark">
+    <img id="food-img" src="little_shark.png" alt="Little Shark">
+    <img id="eel-img" src="electric_eel.png" alt="Electric Eel">
+    <img id="coral-img" src="coral_background.png" alt="Coral Background">
+  </div>
+
+  <script src="game.js"></script>
+</body>
+
+</html>
