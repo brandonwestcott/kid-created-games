@@ -1,2 +1,11 @@
 node_modules
-/assets/
+# Asset library: ignore the files, keep the docs, indexes and tools
+/assets/*
+!/assets/README.md
+!/assets/INDEX.md
+!/assets/*/
+/assets/*/*
+!/assets/*/README.md
+!/assets/*/INDEX.md
+!/assets/_tools/*
+__pycache__/
