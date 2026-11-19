@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mrs Routt's Class Game</title>
+<style>
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: #0b1d3a url('assets/bg-space.jpg') center / cover no-repeat;
+    display: flex; align-items: flex-start; justify-content: center;
+    overflow: hidden;
+    font-family: "Comic Sans MS", "Chalkboard SE", "Trebuchet MS", sans-serif;
+  }
+  #title {
+    font-size: clamp(36px, 6vw, 80px);
+    color: #ffffff;
+    text-align: center;
+    text-shadow: 0 0 18px #6ad0ff, 4px 4px 0 #1b3a6b;
+    margin: 30px 20px 0;
+  }
+  #stars { position: fixed; inset: 0; pointer-events: none; }
+  .twinkle { position: absolute; color: #fff8b0; animation: tw 2s ease-in-out infinite; }
+  @keyframes tw { 0%,100% { opacity: .2; transform: scale(.7); } 50% { opacity: 1; transform: scale(1.2); } }
+  #robot {
+    position: fixed; left: 50%; bottom: 6%;
+    height: min(42vh, 320px); transform: translateX(-50%);
+    cursor: pointer; user-select: none; -webkit-user-drag: none;
+    filter: drop-shadow(0 0 22px rgba(120, 220, 255, .7));
+    animation: float 3s ease-in-out infinite;
+  }
+  @keyframes float { 0%,100% { margin-bottom: 0; } 50% { margin-bottom: 14px; } }
+  #robot.boing { animation: boing .7s ease-out; }
+  @keyframes boing {
+    0% { transform: translateX(-50%) scale(1) rotate(0); }
+    25% { transform: translateX(-50%) translateY(-90px) scale(1.1) rotate(-10deg); }
+    50% { transform: translateX(-50%) translateY(-40px) scale(1.05) rotate(10deg); }
+    75% { transform: translateX(-50%) translateY(0) scale(1.1, .9) rotate(-5deg); }
+    100% { transform: translateX(-50%) scale(1) rotate(0); }
+  }
+  #mute {
+    position: fixed; top: 16px; right: 16px; font-size: 40px;
+    background: rgba(255,255,255,.85); border: none; border-radius: 50%;
+    width: 70px; height: 70px; cursor: pointer;
+  }
+</style>
+</head>
+<body>
+  <div id="stars"></div>
+  <h1 id="title">Mrs Routt's Class Game</h1>
+  <img id="robot" src="assets/robot-idle.png" alt="our robot hero">
+  <button id="mute" aria-label="sound on or off">🔊</button>
+<script>
+  // sounds: made right here, no robot voices
+  let muted = false, actx;
+  function tone(freq, start, len, type = 'square', vol = .12) {
+    if (muted) return;
+    actx = actx || new AudioContext();
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.type = type; o.frequency.value = freq;
+    const t = actx.currentTime + start;
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(.001, t + len);
+    o.connect(g).connect(actx.destination);
+    o.start(t); o.stop(t + len);
+  }
+  function beepBoop() { tone(880, 0, .12); tone(660, .13, .12); tone(1100, .26, .18); }
+  document.getElementById('mute').onclick = (e) => {
+    muted = !muted; e.target.textContent = muted ? '🔇' : '🔊';
+  };
+
+  // the robot boings when you tap it
+  const robot = document.getElementById('robot');
+  robot.onclick = () => {
+    robot.classList.remove('boing'); void robot.offsetWidth;
+    robot.classList.add('boing');
+    robot.src = 'assets/robot-jump.png';
+    beepBoop();
+    setTimeout(() => { robot.src = 'assets/robot-idle.png'; robot.classList.remove('boing'); }, 700);
+  };
+
+
+  // twinkly stars
+  for (let i = 0; i < 18; i++) {
+    const st = document.createElement('div');
+    st.className = 'twinkle';
+    st.textContent = '✦';
+    st.style.left = Math.random() * 100 + '%';
+    st.style.top = Math.random() * 45 + '%';
+    st.style.fontSize = (14 + Math.random() * 20) + 'px';
+    st.style.animationDelay = (Math.random() * 2) + 's';
+    document.getElementById('stars').appendChild(st);
+  }
+</script>
+</body>
+</html>

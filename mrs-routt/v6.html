@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mrs Routt's Class Game</title>
+<style>
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: #0b1d3a url('assets/bg-space.jpg') center / cover no-repeat;
+    display: flex; flex-direction: column; align-items: center;
+    overflow: hidden;
+    font-family: "Comic Sans MS", "Chalkboard SE", "Trebuchet MS", sans-serif;
+  }
+  #title {
+    font-size: clamp(36px, 6vw, 80px);
+    color: #ffffff;
+    text-align: center;
+    text-shadow: 0 0 18px #6ad0ff, 4px 4px 0 #1b3a6b;
+    margin: 30px 20px 0;
+  }
+  #stars { position: fixed; inset: 0; pointer-events: none; }
+  .twinkle { position: absolute; color: #fff8b0; animation: tw 2s ease-in-out infinite; }
+  @keyframes tw { 0%,100% { opacity: .2; transform: scale(.7); } 50% { opacity: 1; transform: scale(1.2); } }
+  #robot {
+    position: fixed; left: 3%; bottom: 4%;
+    height: min(34vh, 300px); transform: translateX(0);
+    cursor: pointer; user-select: none; -webkit-user-drag: none;
+    filter: drop-shadow(0 0 22px rgba(120, 220, 255, .7));
+    animation: float 3s ease-in-out infinite;
+  }
+  @keyframes float { 0%,100% { margin-bottom: 0; } 50% { margin-bottom: 14px; } }
+  #robot.boing { animation: boing .7s ease-out; }
+  @keyframes boing {
+    0% { transform: translateX(0) scale(1) rotate(0); }
+    25% { transform: translateX(0) translateY(-90px) scale(1.1) rotate(-10deg); }
+    50% { transform: translateX(0) translateY(-40px) scale(1.05) rotate(10deg); }
+    75% { transform: translateX(0) translateY(0) scale(1.1, .9) rotate(-5deg); }
+    100% { transform: translateX(0) scale(1) rotate(0); }
+  }
+  #mute {
+    position: fixed; top: 16px; right: 16px; font-size: 40px;
+    background: rgba(255,255,255,.85); border: none; border-radius: 50%;
+    width: 70px; height: 70px; cursor: pointer;
+  }
+  #question {
+    font-size: clamp(32px, 4.5vw, 64px); color: #fff; margin: 1vh 0 0;
+    text-shadow: 3px 3px 0 #1b3a6b; text-align: center;
+  }
+  #pads {
+    display: flex; gap: 2.5vw; justify-content: center; align-items: flex-end;
+    margin-top: 2vh; min-height: 30vh;
+  }
+  .pad { display: flex; flex-direction: column; align-items: center; }
+  .frogs {
+    display: flex; gap: 4px; align-items: flex-end; padding: 0 18px 12px;
+    background: radial-gradient(ellipse at 50% 85%, #6fe36f 0 38%, #2f9e44 39% 48%, transparent 49%);
+    min-height: 120px;
+  }
+  .frogs img { width: clamp(60px, 7vw, 110px); }
+  .frogs img.hop { animation: hop .5s ease-out; }
+  @keyframes hop { 0%,100% { transform: translateY(0); } 40% { transform: translateY(-60px) rotate(-8deg); } }
+  .count {
+    margin-top: 6px; min-width: 80px; padding: 4px 16px; border-radius: 40px;
+    background: #fff; color: #1b3a6b; font-size: clamp(36px, 4vw, 60px); font-weight: bold;
+    text-align: center; box-shadow: 0 4px 0 #1b3a6b;
+  }
+  .count.mystery { background: #ffe066; animation: pulse 1s ease-in-out infinite; }
+  @keyframes pulse { 50% { transform: scale(1.12); } }
+  #answers { display: flex; gap: 3vw; margin-top: 3vh; }
+  .answer {
+    min-width: 150px; min-height: 130px; font-size: clamp(56px, 6vw, 84px);
+    font-family: inherit; font-weight: bold; color: #fff; cursor: pointer;
+    border: none; border-radius: 30px; box-shadow: 0 8px 0 rgba(0,0,0,.35);
+  }
+  .answer:nth-child(1) { background: #ff6b9d; }
+  .answer:nth-child(2) { background: #4dabf7; }
+  .answer:nth-child(3) { background: #ff922b; }
+  .answer:active { transform: translateY(6px); box-shadow: 0 2px 0 rgba(0,0,0,.35); }
+  .answer.wobble { animation: wobble .6s; }
+  @keyframes wobble { 20% { transform: rotate(-12deg); } 40% { transform: rotate(10deg); } 60% { transform: rotate(-6deg); } 80% { transform: rotate(4deg); } }
+  #bubble {
+    position: fixed; left: 2%; bottom: calc(4% + min(34vh, 300px) + 10px); z-index: 6;
+    background: #fff; color: #1b3a6b; font-size: clamp(28px, 3vw, 44px); font-weight: bold;
+    padding: 10px 24px; border-radius: 30px; opacity: 0; transition: opacity .3s;
+    pointer-events: none;
+  }
+  #bubble.show { opacity: 1; }
+  #sky { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
+  #prizes {
+    position: fixed; top: 14px; left: 14px; max-width: 40vw;
+    display: flex; flex-wrap: wrap; gap: 2px; font-size: clamp(30px, 3.2vw, 48px);
+    background: rgba(255,255,255,.18); border-radius: 20px; padding: 4px 10px; min-height: 1em;
+  }
+  #prizes span { animation: pop .5s ease-out; }
+  @keyframes pop { 0% { transform: scale(0); } 70% { transform: scale(1.5); } 100% { transform: scale(1); } }
+  #levelup {
+    position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%) scale(0);
+    background: linear-gradient(#ffd43b, #ff922b); color: #fff; text-align: center;
+    font-size: clamp(56px, 8vw, 120px); font-weight: bold; padding: 20px 50px; border-radius: 40px;
+    text-shadow: 4px 4px 0 #c2410c; box-shadow: 0 0 60px #ffd43b; z-index: 7;
+    transition: transform .4s cubic-bezier(.3, 1.6, .5, 1);
+  }
+  #levelup small { font-size: .5em; }
+  #levelup.show { transform: translate(-50%, -50%) scale(1); }
+  .frogs:has(img:nth-child(3)) img { width: clamp(50px, 5.5vw, 90px); }
+  #prizes span.empty { opacity: .25; filter: grayscale(1); animation: none; }
+  #win {
+    position: fixed; inset: 0; z-index: 4; display: none;
+    flex-direction: column; align-items: center; justify-content: center;
+    background: radial-gradient(circle, rgba(255,212,59,.55), rgba(11,29,58,.92) 75%);
+  }
+  #win.show { display: flex; }
+  #trophy { font-size: min(45vh, 380px); line-height: 1; animation: trophy 1.2s ease-in-out infinite; filter: drop-shadow(0 0 40px #ffd43b); }
+  @keyframes trophy { 0%,100% { transform: scale(1) rotate(-4deg); } 50% { transform: scale(1.1) rotate(4deg); } }
+  #wintext { font-size: clamp(60px, 10vw, 140px); color: #fff; font-weight: bold; text-shadow: 5px 5px 0 #c2410c, 0 0 30px #ffd43b; }
+  #again {
+    margin-top: 2vh; min-height: 120px; padding: 0 50px; font-size: clamp(40px, 5vw, 64px);
+    font-family: inherit; font-weight: bold; color: #fff; background: #51cf66; border: none;
+    border-radius: 30px; box-shadow: 0 8px 0 #2b8a3e; cursor: pointer;
+  }
+  #robot.winner { z-index: 5; animation: float .6s ease-in-out infinite; }
+</style>
+</head>
+<body>
+  <div id="stars"></div>
+  <h1 id="title">Mrs Routt's Class Game</h1>
+  <div id="question">The robot counts frogs by 2s! 🐸</div>
+  <div id="pads"></div>
+  <div id="answers"></div>
+  <div id="bubble"></div>
+  <div id="prizes"></div>
+  <div id="levelup">⭐ LEVEL UP! ⭐<br><small>Count by 3s!</small></div>
+  <div id="win">
+    <div id="trophy">🏆</div>
+    <div id="wintext">YOU WIN!</div>
+    <button id="again">🔁 Play again</button>
+  </div>
+  <canvas id="sky"></canvas>
+  <img id="robot" src="assets/robot-idle.png" alt="our robot hero">
+  <button id="mute" aria-label="sound on or off">🔊</button>
+<script>
+  // sounds: made right here, no robot voices
+  let muted = false, actx;
+  function tone(freq, start, len, type = 'square', vol = .12) {
+    if (muted) return;
+    actx = actx || new AudioContext();
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.type = type; o.frequency.value = freq;
+    const t = actx.currentTime + start;
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(.001, t + len);
+    o.connect(g).connect(actx.destination);
+    o.start(t); o.stop(t + len);
+  }
+  function beepBoop() { tone(880, 0, .12); tone(660, .13, .12); tone(1100, .26, .18); }
+  document.getElementById('mute').onclick = (e) => {
+    muted = !muted; e.target.textContent = muted ? '🔇' : '🔊';
+  };
+
+  // the robot boings when you tap it
+  const robot = document.getElementById('robot');
+  robot.onclick = () => {
+    robot.classList.remove('boing'); void robot.offsetWidth;
+    robot.classList.add('boing');
+    robot.src = 'assets/robot-jump.png';
+    beepBoop();
+    setTimeout(() => { robot.src = 'assets/robot-idle.png'; robot.classList.remove('boing'); }, 700);
+  };
+
+
+  // twinkly stars
+  for (let i = 0; i < 18; i++) {
+    const st = document.createElement('div');
+    st.className = 'twinkle';
+    st.textContent = '✦';
+    st.style.left = Math.random() * 100 + '%';
+    st.style.top = Math.random() * 45 + '%';
+    st.style.fontSize = (14 + Math.random() * 20) + 'px';
+    st.style.animationDelay = (Math.random() * 2) + 's';
+    document.getElementById('stars').appendChild(st);
+  }
+
+  // ---------- FROG COUNTING: count by 2s ----------
+  const voice = {};
+  for (const n of [2, 3, 4, 6, 8, 9, 10, 'correct', 'level_up', 'you_win', 'congratulations']) voice[n] = new Audio('assets/voice-' + n + '.mp3');
+  function say(n) {
+    if (muted) return;
+    if (voice[n]) { voice[n].currentTime = 0; voice[n].play(); }
+    else tone(500 + n * 30, 0, .2, 'triangle', .15); // no voice for big numbers: a happy boop
+  }
+  function funnyBoing() { // silly slide-whistle down
+    if (muted) return;
+    actx = actx || new AudioContext();
+    const o = actx.createOscillator(), g = actx.createGain(), t = actx.currentTime;
+    o.type = 'sine'; o.frequency.setValueAtTime(700, t); o.frequency.exponentialRampToValueAtTime(180, t + .45);
+    g.gain.setValueAtTime(.2, t); g.gain.exponentialRampToValueAtTime(.001, t + .5);
+    o.connect(g).connect(actx.destination); o.start(t); o.stop(t + .5);
+  }
+  const bubble = document.getElementById('bubble');
+  function sayBubble(text, ms = 1500) {
+    bubble.textContent = text; bubble.classList.add('show');
+    clearTimeout(bubble.t); bubble.t = setTimeout(() => bubble.classList.remove('show'), ms);
+  }
+
+  let pads = 0, busy = false, step = 2, rightAnswers = 0;
+  function newQuestion() {
+    let n;
+    const most = step === 2 ? 5 : 4; // 2..5 pads of twos, 2..4 pads of threes
+    do { n = 2 + Math.floor(Math.random() * (most - 1)); } while (n === pads);
+    pads = n;
+    const answer = step * n;
+    const padsEl = document.getElementById('pads');
+    padsEl.innerHTML = '';
+    for (let i = 1; i <= n; i++) {
+      const pad = document.createElement('div'); pad.className = 'pad';
+      pad.innerHTML = '<div class="frogs">' + '<img src="assets/frog.png" alt="frog">'.repeat(step) + '</div>' +
+        '<div class="count' + (i === n ? ' mystery' : '') + '">' + (i === n ? '?' : step * i) + '</div>';
+      padsEl.appendChild(pad);
+    }
+    // close choices: one skip off, and one off by 1
+    const wrongs = [answer + (Math.random() < .5 || answer <= 2 * step ? step : -step), answer + (Math.random() < .5 ? 1 : -1)];
+    const choices = [answer, ...wrongs].sort(() => Math.random() - .5);
+    const ans = document.getElementById('answers');
+    ans.innerHTML = '';
+    for (const c of choices) {
+      const b = document.createElement('button'); b.className = 'answer'; b.textContent = c;
+      b.onclick = () => pick(b, c, answer);
+      ans.appendChild(b);
+    }
+    busy = false;
+  }
+
+  function pick(btn, c, answer) {
+    if (busy) return;
+    if (c !== answer) {
+      btn.classList.remove('wobble'); void btn.offsetWidth; btn.classList.add('wobble');
+      funnyBoing(); sayBubble('Try again! 🐸');
+      return;
+    }
+    busy = true;
+    const padEls = document.querySelectorAll('.pad');
+    padEls.forEach((pad, i) => {
+      setTimeout(() => {
+        pad.querySelectorAll('.frogs img').forEach(f => { f.classList.remove('hop'); void f.offsetWidth; f.classList.add('hop'); });
+        const cnt = pad.querySelector('.count');
+        cnt.textContent = step * (i + 1); cnt.classList.remove('mystery');
+        say(step * (i + 1));
+      }, i * 800);
+    });
+    setTimeout(() => {
+      robot.src = 'assets/robot-cheer1.png';
+      robot.classList.remove('boing'); void robot.offsetWidth; robot.classList.add('boing');
+      say('correct'); sayBubble(answer + ' frogs! 🎉', 2000);
+      fireworks();
+    }, padEls.length * 800 + 200);
+    rightAnswers++;
+    setTimeout(() => {
+      robot.src = 'assets/robot-idle.png';
+      if (rightAnswers === WIN_AT) win();
+      else if (step === 2 && rightAnswers === 2) levelUp(); else newQuestion();
+    }, padEls.length * 800 + 2600);
+  }
+  // ---------- WIN: 8 right = giant trophy ----------
+  const WIN_AT = 8;
+  function makeSlots() {
+    const box = document.getElementById('prizes'); box.innerHTML = '';
+    for (let i = 0; i < WIN_AT; i++) { const sp = document.createElement('span'); sp.textContent = '🎆'; sp.className = 'empty'; box.appendChild(sp); }
+  }
+  makeSlots();
+  let party;
+  function win() {
+    document.getElementById('win').classList.add('show');
+    robot.src = 'assets/robot-cheer1.png'; robot.classList.add('winner');
+    say('you_win'); setTimeout(() => say('congratulations'), 1300);
+    if (!muted) { jingle.currentTime = 0; jingle.play(); }
+    party = setInterval(() => launch(sky.width * (.1 + Math.random() * .8)), 400);
+  }
+  document.getElementById('again').onclick = () => {
+    clearInterval(party);
+    document.getElementById('win').classList.remove('show');
+    robot.src = 'assets/robot-idle.png'; robot.classList.remove('winner');
+    step = 2; rightAnswers = 0; pads = 0; makeSlots();
+    document.getElementById('question').textContent = 'The robot counts frogs by 2s! 🐸';
+    newQuestion();
+  };
+
+  // ---------- LEVEL UP: frogs come in threes ----------
+  function levelUp() {
+    step = 3; pads = 0;
+    document.getElementById('question').textContent = 'Now the frogs come in 3s! 🐸🐸🐸';
+    const banner = document.getElementById('levelup');
+    banner.classList.add('show'); say('level_up');
+    for (let i = 0; i < 4; i++) setTimeout(() => launch(sky.width * (.2 + i * .2)), i * 200);
+    setTimeout(() => { banner.classList.remove('show'); newQuestion(); }, 2600);
+  }
+
+  // ---------- FIREWORKS reward ----------
+  const sky = document.getElementById('sky'), sctx = sky.getContext('2d');
+  function sizeSky() { sky.width = innerWidth; sky.height = innerHeight; }
+  sizeSky(); addEventListener('resize', sizeSky);
+  const rockets = [], sparks = [];
+  const COLORS = ['#ff6b9d', '#ffd43b', '#69db7c', '#4dabf7', '#da77f2', '#ff922b', '#ffffff'];
+  function launch(x) {
+    rockets.push({ x, y: sky.height, vy: -(sky.height * .018 + Math.random() * 4), target: sky.height * (.15 + Math.random() * .3),
+                   color: COLORS[Math.floor(Math.random() * COLORS.length)] });
+  }
+  function burst(r) {
+    for (let i = 0; i < 90; i++) {
+      const a = Math.random() * Math.PI * 2, sp = 2 + Math.random() * 6;
+      sparks.push({ x: r.x, y: r.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 1,
+                    color: Math.random() < .3 ? '#ffffff' : r.color });
+    }
+    // twinkly sparkle sound, not a bang
+    for (let i = 0; i < 4; i++) tone(1200 + Math.random() * 1400, i * .06, .25, 'triangle', .06);
+  }
+  function animateSky() {
+    sctx.clearRect(0, 0, sky.width, sky.height);
+    for (let i = rockets.length - 1; i >= 0; i--) {
+      const r = rockets[i]; r.y += r.vy;
+      sctx.fillStyle = r.color; sctx.beginPath(); sctx.arc(r.x, r.y, 5, 0, 7); sctx.fill();
+      if (r.y <= r.target) { burst(r); rockets.splice(i, 1); }
+    }
+    for (let i = sparks.length - 1; i >= 0; i--) {
+      const p = sparks[i]; p.x += p.vx; p.y += p.vy; p.vy += .08; p.vx *= .98; p.life -= .012;
+      if (p.life <= 0) { sparks.splice(i, 1); continue; }
+      sctx.globalAlpha = p.life; sctx.fillStyle = p.color;
+      sctx.beginPath(); sctx.arc(p.x, p.y, 4, 0, 7); sctx.fill();
+    }
+    sctx.globalAlpha = 1;
+    requestAnimationFrame(animateSky);
+  }
+  animateSky();
+  const jingle = new Audio('assets/jingle-happy.mp3');
+  function fireworks() {
+    if (!muted) { jingle.currentTime = 0; jingle.play(); }
+    for (let i = 0; i < 8; i++) setTimeout(() => launch(sky.width * (.15 + Math.random() * .7)), i * 350);
+    const slot = document.querySelector('#prizes .empty');
+    if (slot) { slot.classList.remove('empty'); slot.style.animation = 'none'; void slot.offsetWidth; slot.style.animation = ''; }
+  }
+
+  newQuestion();
+</script>
+</body>
+</html>

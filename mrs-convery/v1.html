@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mrs. Convery's Class Game</title>
+<style>
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: #fdf3d8;
+    display: flex; align-items: center; justify-content: center;
+    font-family: "Comic Sans MS", "Chalkboard SE", "Marker Felt", sans-serif;
+    overflow: hidden;
+  }
+  #world { position: fixed; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; z-index: -1; }
+  h1 {
+    font-size: clamp(48px, 8vw, 110px);
+    color: #5b4bb7;
+    text-align: center;
+    margin: 0 24px;
+    color: #fff;
+    text-shadow: 5px 5px 0 #3a2a8a;
+    align-self: flex-start; margin-top: 4vh;
+  }
+</style>
+</head>
+<body>
+  <canvas id="world"></canvas>
+  <h1 id="title">Mrs. Convery's Class Game</h1>
+<script>
+// ---- Blocky world: sky, square sun, block clouds, hills of grass / dirt / stone blocks ----
+const world = document.getElementById('world');
+const wctx = world.getContext('2d');
+let seed = 7;
+function rnd() { seed = (seed * 16807) % 2147483647; return seed / 2147483647; }
+function shade(hex, amt) {
+  const n = parseInt(hex.slice(1), 16);
+  const c = [n >> 16, (n >> 8) & 255, n & 255].map(v => Math.max(0, Math.min(255, v + amt)));
+  return `rgb(${c[0]},${c[1]},${c[2]})`;
+}
+function block(x, y, s, base, topColor) {
+  const p = s / 8;
+  for (let i = 0; i < 8; i++) for (let j = 0; j < 8; j++) {
+    let col = base;
+    if (topColor && (j < 2 || (j === 2 && rnd() < 0.5))) col = topColor;
+    wctx.fillStyle = shade(col, Math.floor(rnd() * 30 - 15));
+    wctx.fillRect(Math.floor(x + i * p), Math.floor(y + j * p), Math.ceil(p), Math.ceil(p));
+  }
+}
+function drawWorld() {
+  seed = 7;
+  const W = world.width = innerWidth, H = world.height = innerHeight;
+  const s = Math.ceil(Math.max(W, H) / 22);              // block size
+  const sky = wctx.createLinearGradient(0, 0, 0, H);
+  sky.addColorStop(0, '#6ec6ff'); sky.addColorStop(1, '#bfe9ff');
+  wctx.fillStyle = sky; wctx.fillRect(0, 0, W, H);
+  wctx.fillStyle = '#ffe14d'; wctx.fillRect(W - s * 4, s, s * 2, s * 2);   // square sun
+  wctx.fillStyle = '#fff6a8'; wctx.fillRect(W - s * 3.6, s * 1.4, s * 1.2, s * 1.2);
+  wctx.fillStyle = '#ffffff';                                               // block clouds
+  [[2, 2, 4], [9, 1, 5], [15, 3, 3]].forEach(([cx, cy, w]) => {
+    wctx.fillRect(cx * s, cy * s, w * s, s * 0.7);
+    wctx.fillRect((cx + 1) * s, (cy - 0.6) * s, (w - 2) * s, s * 0.7);
+  });
+  const cols = Math.ceil(W / s) + 1, rows = Math.ceil(H / s);
+  for (let c = 0; c < cols; c++) {
+    const ground = Math.floor(rows * 0.68 + Math.sin(c * 0.45) * 1.6 + Math.sin(c * 0.17) * 1.2);
+    for (let r = ground; r < rows; r++) {
+      const x = c * s, y = r * s;
+      if (r === ground) block(x, y, s, '#8b5a2b', '#5cbf3a');           // grass block
+      else if (r < ground + 3) block(x, y, s, '#8b5a2b');                // dirt
+      else block(x, y, s, '#8a8a8a');                                    // stone
+    }
+    if (c % 7 === 3) {                                                    // little block tree
+      for (let t = 1; t <= 3; t++) block(c * s, (ground - t) * s, s, '#7a4f25');
+      for (let a = -1; a <= 1; a++) for (let b = 4; b <= 5; b++) block((c + a) * s, (ground - b) * s, s, '#3e9a2e');
+    }
+  }
+}
+drawWorld();
+addEventListener('resize', drawWorld);
+</script>
+</body>
+</html>

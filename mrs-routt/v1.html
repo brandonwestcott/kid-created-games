@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mrs Routt's Class Game</title>
+<style>
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: #0b1d3a url('assets/bg-space.jpg') center / cover no-repeat;
+    display: flex; align-items: flex-start; justify-content: center;
+    overflow: hidden;
+    font-family: "Comic Sans MS", "Chalkboard SE", "Trebuchet MS", sans-serif;
+  }
+  #title {
+    font-size: clamp(36px, 6vw, 80px);
+    color: #ffffff;
+    text-align: center;
+    text-shadow: 0 0 18px #6ad0ff, 4px 4px 0 #1b3a6b;
+    margin: 30px 20px 0;
+  }
+  #stars { position: fixed; inset: 0; pointer-events: none; }
+  .twinkle { position: absolute; color: #fff8b0; animation: tw 2s ease-in-out infinite; }
+  @keyframes tw { 0%,100% { opacity: .2; transform: scale(.7); } 50% { opacity: 1; transform: scale(1.2); } }
+</style>
+</head>
+<body>
+  <div id="stars"></div>
+  <h1 id="title">Mrs Routt's Class Game</h1>
+<script>
+  // twinkly stars
+  for (let i = 0; i < 18; i++) {
+    const st = document.createElement('div');
+    st.className = 'twinkle';
+    st.textContent = '✦';
+    st.style.left = Math.random() * 100 + '%';
+    st.style.top = Math.random() * 45 + '%';
+    st.style.fontSize = (14 + Math.random() * 20) + 'px';
+    st.style.animationDelay = (Math.random() * 2) + 's';
+    document.getElementById('stars').appendChild(st);
+  }
+</script>
+</body>
+</html>
